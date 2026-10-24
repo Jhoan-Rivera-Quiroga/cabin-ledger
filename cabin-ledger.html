@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Cabin Ledger — Rural Cabin Manager</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --paper: #F5F1E8;
+    --panel: #FFFFFF;
+    --ink: #262420;
+    --ink-soft: #6F6A5F;
+    --forest: #2F5233;
+    --forest-soft: #E4EAE1;
+    --clay: #A6482E;
+    --clay-soft: #F3E1DA;
+    --timber: #8A5A2B;
+    --timber-soft: #F1E6D6;
+    --line: #DDD6C6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1C1D19; --panel: #262822; --ink: #EDEAE0; --ink-soft: #A9A699;
+      --forest: #7FB88A; --forest-soft: #2A3B2C; --clay: #D98A6E; --clay-soft: #43302A;
+      --timber: #D1A263; --timber-soft: #3E3426; --line: #3B3D34;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .serif { font-family: Georgia, "Iowan Old Style", serif; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .row { display: flex; align-items: center; }
+  .col { display: flex; flex-direction: column; }
+  .wrap { flex-wrap: wrap; }
+  .grow { flex: 1 1 0%; min-width: 0; }
+  .between { justify-content: space-between; }
+  .g1 { gap: 4px; } .g2 { gap: 8px; } .g3 { gap: 12px; } .g4 { gap: 16px; } .g6 { gap: 24px; }
+  .small { font-size: 13px; } .xs { font-size: 12px; }
+  .soft { color: var(--ink-soft); }
+  .scroll-x { overflow-x: auto; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink-soft); font-weight: 400; white-space: nowrap; }
+  td.num, th.num { text-align: right; }
+  button { font-family: inherit; }
+  .btn { padding: 8px 14px; font-size: 14px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:disabled { opacity: 0.6; cursor: default; }
+  .btn-link { background: none; border: none; padding: 0; color: var(--forest); cursor: pointer; font-size: 12px; }
+  .icon-btn { background: none; border: none; cursor: pointer; padding: 2px; color: var(--ink-soft); display: inline-flex; }
+  .icon-btn:hover { color: var(--ink); }
+  .tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+  .tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 14px; font-size: 14px; color: var(--ink-soft); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .tab.active { color: var(--ink); border-bottom-color: var(--forest); }
+  .chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .bar { position: absolute; top: 4px; bottom: 4px; border-radius: 4px; font-size: 11px; color: #fff; padding: 0 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 24px; cursor: pointer; border: none; text-align: left; }
+  @media (max-width: 640px) { .stack-sm { flex-direction: column; align-items: stretch; } }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+/* ---------- configuration ---------- */
+
+const APP_NAME = 'Cabin Ledger';
+const CURRENCY = 'USD';
+
+/* Leave both empty to run in LOCAL MODE: data is saved in this browser only (fine for trying
+   it out or for a single computer). Fill both in to store data in your own Supabase project
+   so every device sees the same bookings -- see cabin-schema.sql and CABIN_NOTES.md. */
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
+
+const NAV = [
+  { id: 'dashboard', label: 'Dashboard', icon: 'Dashboard' },
+  { id: 'calendar', label: 'Calendar', icon: 'Calendar' },
+  { id: 'bookings', label: 'Bookings', icon: 'Bed' },
+  { id: 'expenses', label: 'Expenses', icon: 'Receipt' },
+  { id: 'tasks', label: 'Tasks', icon: 'Check' },
+  { id: 'settings', label: 'Settings', icon: 'Gear' },
+];
+
+const STATUSES = ['Inquiry', 'Confirmed', 'Checked in', 'Completed', 'Cancelled'];
+const COUNTED = ['Confirmed', 'Checked in', 'Completed']; // statuses that count as real revenue / occupancy
+const PAYMENT_METHODS = ['Cash', 'Bank transfer', 'Card', 'Mobile payment', 'Platform payout', 'Other'];
+const TASK_TYPES = ['Cleaning', 'Maintenance', 'Supplies', 'Other'];
+
+const DEFAULTS = {
+  cabins: ['Cabin 1'],
+  channels: ['Direct', 'Airbnb', 'Booking.com', 'Phone / WhatsApp', 'Referral'],
+  categories: ['Cleaning & laundry', 'Firewood & heating', 'Utilities', 'Maintenance & repairs', 'Supplies & amenities', 'Platform fees', 'Insurance & taxes', 'Marketing', 'Other'],
+  staff: [],
+};
+
+const C = {
+  paper: 'var(--paper)', panel: 'var(--panel)', ink: 'var(--ink)', inkSoft: 'var(--ink-soft)',
+  forest: 'var(--forest)', forestSoft: 'var(--forest-soft)', clay: 'var(--clay)', claySoft: 'var(--clay-soft)',
+  timber: 'var(--timber)', timberSoft: 'var(--timber-soft)', line: 'var(--line)',
+};
+
+const STATUS_STYLE = {
+  'Inquiry': { bg: C.timberSoft, fg: C.timber },
+  'Confirmed': { bg: C.forestSoft, fg: C.forest },
+  'Checked in': { bg: C.forest, fg: '#fff' },
+  'Completed': { bg: C.line, fg: C.inkSoft },
+  'Cancelled': { bg: C.claySoft, fg: C.clay },
+};
+const BAR_COLOR = { 'Inquiry': C.timber, 'Confirmed': C.forest, 'Checked in': '#1F7A5A', 'Completed': '#7C8576' };
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/* ---------- date + money helpers (all dates are 'YYYY-MM-DD' strings, handled in UTC to dodge DST) ---------- */
+
+const DAY_MS = 86400000;
+const pad2 = (n) => String(n).padStart(2, '0');
+const parseISO = (s) => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+const toISO = (ms) => new Date(ms).toISOString().slice(0, 10);
+const addDays = (s, n) => toISO(parseISO(s) + n * DAY_MS);
+const nightsBetween = (a, b) => Math.round((parseISO(b) - parseISO(a)) / DAY_MS);
+function todayISO() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate(); // m is 1-based
+const isLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+function fmtDate(s) { if (!s) return ''; const [y, m, d] = s.split('-').map(Number); return `${MONTH_NAMES[m - 1]} ${d}, ${y}`; }
+function fmtShort(s) { const [, m, d] = s.split('-').map(Number); return `${MONTH_NAMES[m - 1]} ${d}`; }
+
+function fmtMoney(n) {
+  return (Number(n) || 0).toLocaleString('en-US', { style: 'currency', currency: CURRENCY, maximumFractionDigits: 0 });
+}
+function cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+function resolveColor(c) {
+  const m = /^var\((--[^)]+)\)$/.exec(c);
+  return m ? cssVar(m[1], '#888') : c;
+}
+
+function addMonths(monthKey, n) {
+  const [y, m] = monthKey.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
+}
+/** Splits an expense into monthly shares (for things like an annual insurance premium). The rounding
+ *  remainder lands in the last month so the shares always add up to the original amount. */
+function explodeExpense(r) {
+  const months = r.accrualMonths && r.accrualMonths > 1 ? r.accrualMonths : 1;
+  const startKey = r.date.slice(0, 7);
+  const day = Number(r.date.slice(8, 10));
+  const base = Math.floor(r.amount / months);
+  const remainder = r.amount - base * months;
+  const rows = [];
+  for (let i = 0; i < months; i++) {
+    const month = addMonths(startKey, i);
+    const [y, m] = month.split('-').map(Number);
+    rows.push({ month, date: `${month}-${pad2(Math.min(day, daysInMonth(y, m)))}`, amount: i === months - 1 ? base + remainder : base });
+  }
+  return rows;
+}
+
+/* ---------- booking maths ---------- */
+
+const bookingNights = (b) => Math.max(0, nightsBetween(b.checkIn, b.checkOut));
+const bookingTotal = (b) => bookingNights(b) * b.nightlyRate + (b.cleaningFee || 0);
+const bookingBalance = (b) => bookingTotal(b) - (b.amountPaid || 0);
+function nightDates(b) { const out = []; for (let i = 0; i < bookingNights(b); i++) out.push(addDays(b.checkIn, i)); return out; }
+function findConflict(bookings, cand, ignoreId) {
+  if (cand.status === 'Cancelled') return null;
+  return bookings.find((b) => b.id !== ignoreId && b.status !== 'Cancelled' && b.cabin === cand.cabin && b.checkIn < cand.checkOut && cand.checkIn < b.checkOut) || null;
+}
+
+/** Everything the dashboard shows for one calendar year. Revenue is recognised per night (a stay that
+ *  crosses a month end is split), cleaning fees and platform commissions land in the check-in month. */
+function computeYear(bookings, expenses, year, cabinCount, today) {
+  const rev = Array(12).fill(0), comm = Array(12).fill(0), nights = Array(12).fill(0), exp = Array(12).fill(0);
+  const ys = String(year);
+  let nightsToDate = 0, lodgingToDate = 0;
+  bookings.filter((b) => COUNTED.includes(b.status)).forEach((b) => {
+    nightDates(b).forEach((d) => {
+      if (d.slice(0, 4) !== ys) return;
+      const i = Number(d.slice(5, 7)) - 1;
+      rev[i] += b.nightlyRate; nights[i] += 1;
+      if (d <= today) { nightsToDate += 1; lodgingToDate += b.nightlyRate; }
+    });
+    if (b.checkIn.slice(0, 4) === ys) {
+      const i = Number(b.checkIn.slice(5, 7)) - 1;
+      rev[i] += b.cleaningFee || 0; comm[i] += b.commission || 0;
+    }
+  });
+  expenses.forEach((e) => explodeExpense(e).forEach((s) => { if (s.month.slice(0, 4) === ys) exp[Number(s.month.slice(5, 7)) - 1] += s.amount; }));
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
+  const yearDays = isLeap(year) ? 366 : 365;
+  const currentYear = Number(today.slice(0, 4));
+  const elapsed = year < currentYear ? yearDays : year > currentYear ? 0
+    : Math.round((parseISO(today) - Date.UTC(year, 0, 1)) / DAY_MS) + 1;
+  const capacity = elapsed * Math.max(1, cabinCount);
+  return {
+    rev, comm, nights, exp,
+    revenue: sum(rev), commission: sum(comm), expenses: sum(exp),
+    occupancy: capacity ? Math.round((nightsToDate / capacity) * 1000) / 10 : null,
+    adr: nightsToDate ? Math.round(lodgingToDate / nightsToDate) : null,
+    nightsToDate,
+    monthOccupancy: nights.map((n, i) => Math.round((n / (daysInMonth(year, i + 1) * Math.max(1, cabinCount))) * 1000) / 10),
+  };
+}
+
+/* ---------- storage: browser (local mode) or Supabase ---------- */
+
+const sb = (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const LS_PREFIX = 'cabinledger:';
+const newId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+const lsRead = (key, fallback) => { try { const v = localStorage.getItem(LS_PREFIX + key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } };
+const lsWrite = (key, value) => { try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); return null; } catch (e) { return { message: 'Could not save in this browser (storage full or blocked).' }; } };
+const LOCAL_KEYS = ['bookings', 'expenses', 'tasks', 'config'];
+
+const store = sb ? {
+  async list(table, col) { const { data, error } = await sb.from(table).select('*').order(col, { ascending: true }); return { data: data || [], error }; },
+  async insert(table, rows) { const { error } = await sb.from(table).insert(rows); return error; },
+  async update(table, id, row) { const { error } = await sb.from(table).update(row).eq('id', id); return error; },
+  async remove(table, id) { const { error } = await sb.from(table).delete().eq('id', id); return error; },
+  async getConfig(key) { const { data } = await sb.from('config').select('items').eq('key', key).maybeSingle(); return data ? data.items : null; },
+  async setConfig(key, items) { const { error } = await sb.from('config').upsert({ key, items }); return error; },
+} : {
+  async list(table, col) { return { data: lsRead(table, []).sort((a, b) => String(a[col] || '').localeCompare(String(b[col] || ''))), error: null }; },
+  async insert(table, rows) { return lsWrite(table, [...lsRead(table, []), ...rows.map((r) => ({ ...r, id: newId() }))]); },
+  async update(table, id, row) { return lsWrite(table, lsRead(table, []).map((r) => (r.id === id ? { ...row, id } : r))); },
+  async remove(table, id) { return lsWrite(table, lsRead(table, []).filter((r) => r.id !== id)); },
+  async getConfig(key) { return lsRead('config', {})[key] || null; },
+  async setConfig(key, items) { return lsWrite('config', { ...lsRead('config', {}), [key]: items }); },
+};
+
+/* snake_case database rows <-> camelCase app records */
+const bookingFromDb = (r) => ({ id: r.id, guest: r.guest, phone: r.phone || '', cabin: r.cabin, checkIn: r.check_in, checkOut: r.check_out, guests: r.guests, nightlyRate: r.nightly_rate, cleaningFee: r.cleaning_fee || 0, commission: r.commission || 0, channel: r.channel || '', status: r.status, amountPaid: r.amount_paid || 0, paymentMethod: r.payment_method || '', notes: r.notes || '' });
+const bookingToDb = (b) => ({ guest: b.guest, phone: b.phone || null, cabin: b.cabin, check_in: b.checkIn, check_out: b.checkOut, guests: b.guests, nightly_rate: b.nightlyRate, cleaning_fee: b.cleaningFee || 0, commission: b.commission || 0, channel: b.channel || null, status: b.status, amount_paid: b.amountPaid || 0, payment_method: b.paymentMethod || null, notes: b.notes || null });
+const expenseFromDb = (r) => ({ id: r.id, date: r.date, category: r.category, description: r.description, amount: r.amount, ...(r.accrual_months ? { accrualMonths: r.accrual_months } : {}) });
+const expenseToDb = (e) => ({ date: e.date, category: e.category, description: e.description, amount: e.amount, accrual_months: e.accrualMonths || null });
+const taskFromDb = (r) => ({ id: r.id, dueDate: r.due_date, type: r.type, cabin: r.cabin || '', description: r.description, assignee: r.assignee || '', done: !!r.done });
+const taskToDb = (t) => ({ due_date: t.dueDate, type: t.type, cabin: t.cabin || null, description: t.description, assignee: t.assignee || null, done: !!t.done });
+
+function useTable(table, fromDb, toDb, orderCol, onError) {
+  const [items, setItems] = useState([]);
+  const refresh = useCallback(async () => {
+    const { data, error } = await store.list(table, orderCol);
+    if (error) { onError(error.message); return; }
+    setItems(data.map(fromDb));
+  }, [table, orderCol]);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const run = useCallback(async (op) => {
+    const error = await op();
+    if (error) onError(error.message || 'Something went wrong saving that.');
+    else await refresh();
+    return error;
+  }, [refresh, onError]);
+
+  return {
+    items, refresh,
+    add: (rec) => run(() => store.insert(table, [toDb(rec)])),
+    save: (id, rec) => run(() => store.update(table, id, toDb(rec))),
+    remove: (id) => run(() => store.remove(table, id)),
+  };
+}
+
+function useConfigList(key) {
+  const [items, setItems] = useState([]);
+  const ref = useRef(items);
+  ref.current = items;
+  useEffect(() => {
+    (async () => {
+      const stored = await store.getConfig(key);
+      if (stored) setItems(stored);
+      else { const seed = DEFAULTS[key] || []; await store.setConfig(key, seed); setItems(seed); }
+    })();
+  }, [key]);
+  const write = async (next) => { setItems(next); await store.setConfig(key, next); };
+  return [items, (name) => write([...ref.current, name]), (name) => write(ref.current.filter((i) => i !== name))];
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ---------- icons ---------- */
+
+function mkIcon(children) {
+  return function IconCmp({ size = 16, className, style }) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+           strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>{children}</svg>
+    );
+  };
+}
+const Icon = {
+  Plus: mkIcon(<path d="M12 5v14M5 12h14" />),
+  X: mkIcon(<path d="M18 6L6 18M6 6l12 12" />),
+  Check: mkIcon(<path d="M20 6L9 17l-5-5" />),
+  Trash: mkIcon(<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />),
+  Pencil: mkIcon(<path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />),
+  Download: mkIcon(<path d="M12 3v12M7 10l5 5 5-5M4 21h16" />),
+  Upload: mkIcon(<path d="M12 15V3M7 8l5-5 5 5M4 21h16" />),
+  Loader: mkIcon(<path d="M12 3a9 9 0 1 0 9 9" />),
+  Refresh: mkIcon(<path d="M21 12a9 9 0 10-3.2 6.9M21 12v-5M21 12h-5" />),
+  Dashboard: mkIcon(<><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></>),
+  Calendar: mkIcon(<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>),
+  Bed: mkIcon(<path d="M3 18V6M3 14h18v4M21 14v-3a3 3 0 00-3-3h-7v6" />),
+  Receipt: mkIcon(<><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6" /></>),
+  Gear: mkIcon(<><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" /></>),
+  Left: mkIcon(<path d="M15 6l-6 6 6 6" />),
+  Right: mkIcon(<path d="M9 6l6 6-6 6" />),
+};
+
+/* ---------- small building blocks ---------- */
+
+const inputStyle = { border: `1px solid ${C.line}`, borderRadius: 6, padding: '8px 10px', fontSize: 14, color: C.ink, background: C.panel, width: '100%' };
+
+function Field({ label, children, hint }) {
+  return (
+    <label className="col g1 grow">
+      <span className="small soft">{label}</span>
+      {children}
+      {hint ? <span className="xs soft">{hint}</span> : null}
+    </label>
+  );
+}
+const TextInput = (props) => <input {...props} style={{ ...inputStyle, ...(props.style || {}) }} />;
+const Select = (props) => <select {...props} style={{ ...inputStyle, ...(props.style || {}) }} />;
+function MoneyInput({ value, onChange }) {
+  return (
+    <div className="row" style={{ border: `1px solid ${C.line}`, borderRadius: 6, padding: '0 10px', background: C.panel }}>
+      <span className="soft" style={{ fontSize: 14 }}>$</span>
+      <input type="number" min="0" step="1" value={value} onChange={onChange} placeholder="0"
+             style={{ border: 'none', outline: 'none', flex: 1, padding: '8px 6px', fontSize: 14, background: 'transparent', color: C.ink, width: '100%' }} />
+    </div>
+  );
+}
+function KpiCard({ label, value, sub, accent }) {
+  return (
+    <div className="card grow" style={{ borderLeft: `3px solid ${accent}`, minWidth: 160, padding: 14 }}>
+      <div className="xs soft">{label}</div>
+      <div className="serif" style={{ fontSize: 24, marginTop: 4 }}>{value}</div>
+      {sub ? <div className="xs soft" style={{ marginTop: 4 }}>{sub}</div> : null}
+    </div>
+  );
+}
+const EmptyState = ({ text }) => <div className="row small soft" style={{ justifyContent: 'center', padding: '48px 0' }}>{text}</div>;
+function StatusChip({ status }) {
+  const s = STATUS_STYLE[status] || STATUS_STYLE.Completed;
+  return <span className="chip" style={{ background: s.bg, color: s.fg }}>{status}</span>;
+}
+function Btn({ kind = 'primary', accent = C.forest, ...props }) {
+  const style = kind === 'primary' ? { background: accent, color: '#fff' }
+    : kind === 'ghost' ? { background: 'transparent', color: C.inkSoft, borderColor: C.line }
+    : { background: 'transparent', color: C.forest, borderColor: C.forest, borderStyle: 'dashed' };
+  return <button className="btn" {...props} style={{ ...style, ...(props.style || {}) }} />;
+}
+function SectionTitle({ children, right }) {
+  return <div className="row between wrap g3" style={{ marginBottom: 12 }}><h2 className="serif" style={{ margin: 0, fontSize: 18, fontWeight: 400 }}>{children}</h2>{right}</div>;
+}
+
+function ChartCanvas({ type, labels, datasets, money, percent }) {
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    if (chartRef.current) chartRef.current.destroy();
+    const inkSoft = cssVar('--ink-soft', '#666'), line = cssVar('--line', '#ddd');
+    chartRef.current = new Chart(canvasRef.current, {
+      type,
+      data: {
+        labels,
+        datasets: datasets.map((d) => ({
+          label: d.label, data: d.values, borderColor: resolveColor(d.color),
+          backgroundColor: type === 'line' ? 'transparent' : resolveColor(d.color),
+          borderWidth: type === 'line' ? 2 : 0, borderRadius: type === 'bar' ? 3 : 0, tension: 0.3, pointRadius: 0, maxBarThickness: 28,
+        })),
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: datasets.length > 1, labels: { color: inkSoft, boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label ? ctx.dataset.label + ': ' : ''}${money ? fmtMoney(ctx.parsed.y) : percent ? ctx.parsed.y + '%' : ctx.parsed.y}` } },
+        },
+        scales: {
+          x: { ticks: { color: inkSoft, font: { size: 11 } }, grid: { display: false } },
+          y: { beginAtZero: true, max: percent ? 100 : undefined, ticks: { color: inkSoft, font: { size: 11 }, callback: money ? (v) => fmtMoney(v) : percent ? (v) => v + '%' : undefined }, grid: { color: line } },
+        },
+      },
+    });
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+    // eslint-disable-next-line
+  }, [type, JSON.stringify(labels), JSON.stringify(datasets), money, percent]);
+  return <div style={{ height: 220 }}><canvas ref={canvasRef}></canvas></div>;
+}
+
+function ListManager({ title, items, onAdd, onRemove, placeholder, hint }) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  function submit() {
+    const t = name.trim();
+    if (!t) { setError('Enter a name.'); return; }
+    if (items.some((i) => i.toLowerCase() === t.toLowerCase())) { setError('Already on the list.'); return; }
+    setError(''); onAdd(t); setName('');
+  }
+  return (
+    <div className="card col g3">
+      <div><div style={{ fontSize: 15 }}>{title}</div>{hint ? <div className="xs soft">{hint}</div> : null}</div>
+      {items.length === 0 ? <div className="xs soft">Nothing here yet.</div> : (
+        <div className="row wrap g2">
+          {items.map((p) => (
+            <span key={p} className="row g1 xs" style={{ background: C.forestSoft, color: C.forest, borderRadius: 999, padding: '4px 8px' }}>
+              {p}
+              <button type="button" onClick={() => onRemove(p)} aria-label={`Remove ${p}`} className="icon-btn" style={{ color: C.forest }}><Icon.X size={12} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="row g2">
+        <TextInput type="text" placeholder={placeholder} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }} />
+        <Btn type="button" onClick={submit} accent={C.ink} style={{ color: C.paper }}>Add</Btn>
+      </div>
+      {error ? <div className="xs" style={{ color: C.clay }}>{error}</div> : null}
+    </div>
+  );
+}
+
+function RowActions({ onEdit, onDelete }) {
+  return (
+    <div className="row g2" style={{ justifyContent: 'flex-end' }}>
+      {onEdit ? <button className="icon-btn" onClick={onEdit} aria-label="Edit"><Icon.Pencil size={14} /></button> : null}
+      <button className="icon-btn" onClick={onDelete} aria-label="Delete"><Icon.Trash size={14} /></button>
+    </div>
+  );
+}
+
+/* ---------- booking form ---------- */
+
+function BookingForm({ editing, bookings, cabins, channels, onAdd, onSave, onCancel, onCreateCleaning }) {
+  const today = todayISO();
+  const [f, setF] = useState(() => editing ? {
+    guest: editing.guest, phone: editing.phone, cabin: editing.cabin, guests: String(editing.guests), checkIn: editing.checkIn, checkOut: editing.checkOut,
+    nightlyRate: String(editing.nightlyRate), cleaningFee: editing.cleaningFee ? String(editing.cleaningFee) : '', commission: editing.commission ? String(editing.commission) : '',
+    channel: editing.channel, status: editing.status, amountPaid: editing.amountPaid ? String(editing.amountPaid) : '', paymentMethod: editing.paymentMethod, notes: editing.notes,
+  } : {
+    guest: '', phone: '', cabin: cabins.length === 1 ? cabins[0] : '', guests: '2', checkIn: today, checkOut: addDays(today, 2),
+    nightlyRate: '', cleaningFee: '', commission: '', channel: channels[0] || '', status: 'Confirmed', amountPaid: '', paymentMethod: '', notes: '',
+  });
+  const [cleaning, setCleaning] = useState(true);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const set = (patch) => setF((p) => ({ ...p, ...patch }));
+
+  // Picking a cabin pre-fills price and cleaning fee from its most recent booking (new bookings only).
+  function pickCabin(cabin) {
+    const patch = { cabin };
+    if (!editing && !f.nightlyRate) {
+      const last = bookings.filter((b) => b.cabin === cabin).sort((a, b) => b.checkIn.localeCompare(a.checkIn))[0];
+      if (last) { patch.nightlyRate = String(last.nightlyRate); if (!f.cleaningFee && last.cleaningFee) patch.cleaningFee = String(last.cleaningFee); }
+    }
+    set(patch);
+  }
+  useEffect(() => { if (!f.cabin && cabins.length === 1) pickCabin(cabins[0]); }, [cabins.length]);
+
+  const nights = f.checkIn && f.checkOut ? nightsBetween(f.checkIn, f.checkOut) : 0;
+  const total = Math.max(0, nights) * (Number(f.nightlyRate) || 0) + (Number(f.cleaningFee) || 0);
+  const isWhole = (v, min) => v === '' || (Number.isInteger(Number(v)) && Number(v) >= min);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!f.guest.trim() || !f.cabin || !f.checkIn || !f.checkOut) { setError('Fill in guest name, cabin and both dates.'); return; }
+    if (nights < 1) { setError('Check-out must be at least one day after check-in.'); return; }
+    if (!f.guests || !isWhole(f.guests, 1)) { setError('Number of guests must be a whole number, 1 or more.'); return; }
+    if (f.nightlyRate === '' || !isWhole(f.nightlyRate, 0)) { setError('Enter the nightly rate as a whole number (0 or more).'); return; }
+    if (!isWhole(f.cleaningFee, 0) || !isWhole(f.commission, 0) || !isWhole(f.amountPaid, 0)) { setError('Cleaning fee, commission and amount paid must be whole numbers (0 or more).'); return; }
+    const rec = {
+      guest: f.guest.trim(), phone: f.phone.trim(), cabin: f.cabin, guests: Number(f.guests), checkIn: f.checkIn, checkOut: f.checkOut,
+      nightlyRate: Number(f.nightlyRate), cleaningFee: Number(f.cleaningFee) || 0, commission: Number(f.commission) || 0, channel: f.channel,
+      status: f.status, amountPaid: Number(f.amountPaid) || 0, paymentMethod: f.paymentMethod, notes: f.notes.trim(),
+    };
+    const clash = findConflict(bookings, rec, editing ? editing.id : null);
+    if (clash) { setError(`${rec.cabin} is already booked ${fmtShort(clash.checkIn)} → ${fmtShort(clash.checkOut)} (${clash.guest}). Pick other dates or another cabin.`); return; }
+    setError(''); setSaving(true);
+    try {
+      const err = editing ? await onSave(editing.id, rec) : await onAdd(rec);
+      if (!err && !editing && cleaning && rec.status !== 'Cancelled') await onCreateCleaning(rec);
+      if (!err) onCancel();
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <form onSubmit={submit} className="card col g4" style={{ maxWidth: 720 }}>
+      <SectionTitle>{editing ? `Edit booking — ${editing.guest}` : 'New booking'}</SectionTitle>
+      <div className="row g4 stack-sm">
+        <Field label="Guest name"><TextInput type="text" value={f.guest} onChange={(e) => set({ guest: e.target.value })} /></Field>
+        <Field label="Phone / contact" hint="Optional"><TextInput type="text" value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
+      </div>
+      <div className="row g4 stack-sm">
+        <Field label="Cabin">
+          <Select value={f.cabin} onChange={(e) => pickCabin(e.target.value)}>
+            <option value="">{cabins.length ? 'Select cabin' : 'Add a cabin in Settings first'}</option>
+            {cabins.map((c) => <option key={c} value={c}>{c}</option>)}
+          </Select>
+        </Field>
+        <Field label="Guests"><TextInput type="number" min="1" step="1" value={f.guests} onChange={(e) => set({ guests: e.target.value })} /></Field>
+        <Field label="Channel">
+          <Select value={f.channel} onChange={(e) => set({ channel: e.target.value })}>
+            <option value="">—</option>
+            {channels.map((c) => <option key={c} value={c}>{c}</option>)}
+          </Select>
+        </Field>
+      </div>
+      <div className="row g4 stack-sm">
+        <Field label="Check-in"><TextInput type="date" value={f.checkIn} onChange={(e) => {
+          const checkIn = e.target.value;
+          set({ checkIn, ...(checkIn && f.checkOut <= checkIn ? { checkOut: addDays(checkIn, 1) } : {}) });
+        }} /></Field>
+        <Field label="Check-out"><TextInput type="date" value={f.checkOut} min={f.checkIn ? addDays(f.checkIn, 1) : undefined} onChange={(e) => set({ checkOut: e.target.value })} /></Field>
+        <Field label="Status">
+          <Select value={f.status} onChange={(e) => set({ status: e.target.value })}>{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</Select>
+        </Field>
+      </div>
+      <div className="row g4 stack-sm">
+        <Field label="Nightly rate"><MoneyInput value={f.nightlyRate} onChange={(e) => set({ nightlyRate: e.target.value })} /></Field>
+        <Field label="Cleaning fee" hint="Optional"><MoneyInput value={f.cleaningFee} onChange={(e) => set({ cleaningFee: e.target.value })} /></Field>
+        <Field label="Platform commission" hint="Optional, what the channel keeps"><MoneyInput value={f.commission} onChange={(e) => set({ commission: e.target.value })} /></Field>
+      </div>
+      <div className="row g4 stack-sm">
+        <Field label="Amount paid so far"><MoneyInput value={f.amountPaid} onChange={(e) => set({ amountPaid: e.target.value })} /></Field>
+        <Field label="Payment method">
+          <Select value={f.paymentMethod} onChange={(e) => set({ paymentMethod: e.target.value })}>
+            <option value="">—</option>
+            {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+          </Select>
+        </Field>
+      </div>
+      <Field label="Notes" hint="Optional — arrival time, pets, allergies, special requests">
+        <textarea value={f.notes} onChange={(e) => set({ notes: e.target.value })} style={{ ...inputStyle, minHeight: 64, resize: 'vertical' }} />
+      </Field>
+      <div className="small soft">
+        {nights > 0 ? <>{nights} night{nights > 1 ? 's' : ''} × {fmtMoney(Number(f.nightlyRate) || 0)}{Number(f.cleaningFee) ? ` + ${fmtMoney(Number(f.cleaningFee))} cleaning` : ''} = <span className="tabular" style={{ color: C.ink }}>{fmtMoney(total)}</span>
+          {' '}· balance due <span className="tabular" style={{ color: C.ink }}>{fmtMoney(total - (Number(f.amountPaid) || 0))}</span></> : 'Pick valid dates to see the total.'}
+      </div>
+      {!editing ? (
+        <label className="row g2 small" style={{ cursor: 'pointer' }}>
+          <input type="checkbox" checked={cleaning} onChange={(e) => setCleaning(e.target.checked)} />
+          Add a cleaning task for check-out day
+        </label>
+      ) : null}
+      {error ? <div className="small" style={{ color: C.clay }}>{error}</div> : null}
+      <div className="row g2" style={{ justifyContent: 'flex-end' }}>
+        <Btn type="button" kind="ghost" onClick={onCancel}>Cancel</Btn>
+        <Btn type="submit" disabled={saving}>{saving ? <Icon.Loader size={14} className="spin" /> : editing ? <Icon.Check size={14} /> : <Icon.Plus size={14} />}{editing ? 'Save changes' : 'Add booking'}</Btn>
+      </div>
+    </form>
+  );
+}
+
+/* ---------- bookings tab ---------- */
+
+function BookingsTab({ bookings, cabins, channels, editRequest, clearEditRequest, onAdd, onSave, onRemove, onCreateCleaning }) {
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [scope, setScope] = useState('upcoming');
+  const [status, setStatus] = useState('');
+  const [cabin, setCabin] = useState('');
+  const [search, setSearch] = useState('');
+  const today = todayISO();
+
+  useEffect(() => { if (editRequest) { setEditing(editRequest); setFormOpen(true); clearEditRequest(); } }, [editRequest]);
+
+  const rows = useMemo(() => bookings.filter((b) =>
+    (scope === 'all' || (scope === 'upcoming' ? b.checkOut >= today : b.checkOut < today))
+    && (!status || b.status === status) && (!cabin || b.cabin === cabin)
+    && (!search || `${b.guest} ${b.phone} ${b.notes} ${b.channel}`.toLowerCase().includes(search.toLowerCase()))
+  ).sort((a, b) => (scope === 'past' ? b.checkIn.localeCompare(a.checkIn) : a.checkIn.localeCompare(b.checkIn))), [bookings, scope, status, cabin, search, today]);
+
+  function close() { setFormOpen(false); setEditing(null); }
+  async function markPaid(b) { await onSave(b.id, { ...b, amountPaid: bookingTotal(b) }); }
+
+  return (
+    <div className="col g4">
+      {formOpen ? (
+        <BookingForm key={editing ? editing.id : 'new'} editing={editing} bookings={bookings} cabins={cabins} channels={channels}
+          onAdd={onAdd} onSave={onSave} onCancel={close} onCreateCleaning={onCreateCleaning} />
+      ) : (
+        <div><Btn onClick={() => setFormOpen(true)}><Icon.Plus size={14} /> New booking</Btn></div>
+      )}
+      <div className="row g3 wrap">
+        <div className="row" style={{ border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden' }}>
+          {[['upcoming', 'Upcoming'], ['past', 'Past'], ['all', 'All']].map(([id, label]) => (
+            <button key={id} onClick={() => setScope(id)} className="small" style={{ padding: '7px 12px', border: 'none', cursor: 'pointer', background: scope === id ? C.forest : C.panel, color: scope === id ? '#fff' : C.inkSoft }}>{label}</button>
+          ))}
+        </div>
+        <Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 'auto' }}><option value="">All statuses</option>{STATUSES.map((s) => <option key={s}>{s}</option>)}</Select>
+        {cabins.length > 1 ? <Select value={cabin} onChange={(e) => setCabin(e.target.value)} style={{ width: 'auto' }}><option value="">All cabins</option>{cabins.map((c) => <option key={c}>{c}</option>)}</Select> : null}
+        <TextInput type="search" placeholder="Search guest, phone, notes…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 240 }} />
+      </div>
+      {rows.length === 0 ? <EmptyState text={bookings.length ? 'No bookings match these filters.' : 'No bookings yet — add your first one.'} /> : (
+        <div className="card scroll-x" style={{ padding: '4px 16px' }}>
+          <table>
+            <thead><tr><th>Guest</th><th>Cabin</th><th>Stay</th><th className="num">Total</th><th className="num">Balance</th><th>Channel</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {rows.map((b) => {
+                const bal = bookingBalance(b);
+                return (
+                  <tr key={b.id}>
+                    <td><div>{b.guest}</div><div className="xs soft">{b.guests} guest{b.guests > 1 ? 's' : ''}{b.phone ? ` · ${b.phone}` : ''}</div>{b.notes ? <div className="xs soft" style={{ maxWidth: 240, whiteSpace: 'pre-wrap' }}>{b.notes}</div> : null}</td>
+                    <td>{b.cabin}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{fmtShort(b.checkIn)} → {fmtShort(b.checkOut)}<div className="xs soft">{bookingNights(b)} night{bookingNights(b) > 1 ? 's' : ''} · {fmtMoney(b.nightlyRate)}/night</div></td>
+                    <td className="num tabular">{fmtMoney(bookingTotal(b))}</td>
+                    <td className="num tabular">
+                      {b.status === 'Cancelled' ? <span className="soft">—</span> : bal > 0 ? (
+                        <><span style={{ color: C.clay }}>{fmtMoney(bal)}</span><div><button className="btn-link" onClick={() => markPaid(b)}>Mark paid</button></div></>
+                      ) : <span style={{ color: C.forest }}>Paid</span>}
+                    </td>
+                    <td>{b.channel || <span className="soft">—</span>}</td>
+                    <td><StatusChip status={b.status} /></td>
+                    <td><RowActions onEdit={() => { setEditing(b); setFormOpen(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      onDelete={() => { if (window.confirm(`Delete the booking for ${b.guest}? This can't be undone. (To keep a record, set it to Cancelled instead.)`)) onRemove(b.id); }} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- calendar tab ---------- */
+
+function CalendarTab({ bookings, cabins, onOpenBooking }) {
+  const now = new Date();
+  const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() + 1 });
+  const N = daysInMonth(ym.y, ym.m);
+  const start = `${ym.y}-${pad2(ym.m)}-01`;
+  const endExcl = addDays(start, N);
+  const today = todayISO();
+  const shift = (d) => setYm(({ y, m }) => { const t = new Date(Date.UTC(y, m - 1 + d, 1)); return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1 }; });
+  const todayIdx = today >= start && today < endExcl ? nightsBetween(start, today) : -1;
+
+  return (
+    <div className="col g4">
+      <div className="row g3 wrap">
+        <button className="icon-btn" onClick={() => shift(-1)} aria-label="Previous month"><Icon.Left size={18} /></button>
+        <h2 className="serif" style={{ margin: 0, fontSize: 20, fontWeight: 400, minWidth: 150, textAlign: 'center' }}>{MONTH_NAMES[ym.m - 1]} {ym.y}</h2>
+        <button className="icon-btn" onClick={() => shift(1)} aria-label="Next month"><Icon.Right size={18} /></button>
+        <button className="btn-link" onClick={() => setYm({ y: now.getFullYear(), m: now.getMonth() + 1 })}>Today</button>
+        <div className="row g3 xs soft" style={{ marginLeft: 'auto' }}>
+          {Object.entries(BAR_COLOR).map(([s, c]) => <span key={s} className="row g1"><span style={{ width: 10, height: 10, borderRadius: 2, background: c, display: 'inline-block' }} />{s}</span>)}
+        </div>
+      </div>
+      {cabins.length === 0 ? <EmptyState text="Add your cabins in Settings to see the calendar." /> : (
+        <div className="card scroll-x" style={{ padding: 12 }}>
+          <div style={{ minWidth: 760 }}>
+            <div className="row">
+              <div style={{ width: 110, flexShrink: 0 }} />
+              <div className="row grow">
+                {Array.from({ length: N }, (_, i) => {
+                  const dow = new Date(Date.UTC(ym.y, ym.m - 1, i + 1)).getUTCDay();
+                  return (
+                    <div key={i} className="xs tabular" style={{ flex: 1, textAlign: 'center', padding: '2px 0', color: i === todayIdx ? C.forest : C.inkSoft, fontWeight: i === todayIdx ? 700 : 400, background: dow === 0 || dow === 6 ? C.paper : 'transparent' }}>
+                      {i + 1}<div style={{ fontSize: 10 }}>{'SMTWTFS'[dow]}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {cabins.map((cabin) => (
+              <div key={cabin} className="row" style={{ borderTop: `1px solid ${C.line}` }}>
+                <div className="small" style={{ width: 110, flexShrink: 0, paddingRight: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cabin}</div>
+                <div className="grow" style={{ position: 'relative', height: 36, backgroundImage: `linear-gradient(to right, ${C.line} 1px, transparent 1px)`, backgroundSize: `${100 / N}% 100%` }}>
+                  {todayIdx >= 0 ? <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${(todayIdx / N) * 100}%`, width: `${100 / N}%`, background: C.forestSoft, opacity: 0.6 }} /> : null}
+                  {bookings.filter((b) => b.cabin === cabin && b.status !== 'Cancelled' && b.checkIn < endExcl && b.checkOut > start).map((b) => {
+                    const s = Math.max(0, nightsBetween(start, b.checkIn));
+                    const e = Math.min(N, nightsBetween(start, b.checkOut));
+                    return (
+                      <button key={b.id} className="bar" onClick={() => onOpenBooking(b)}
+                        title={`${b.guest} · ${fmtShort(b.checkIn)} → ${fmtShort(b.checkOut)} · ${b.status}`}
+                        style={{ left: `calc(${(s / N) * 100}% + 1px)`, width: `calc(${((e - s) / N) * 100}% - 2px)`, background: BAR_COLOR[b.status] || C.inkSoft, opacity: b.status === 'Inquiry' ? 0.75 : 1 }}>
+                        {b.guest}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="xs soft">Click a booking to edit it. Bars start on the check-in day and end on the check-out day, so same-day turnovers sit side by side.</div>
+    </div>
+  );
+}
+
+/* ---------- expenses tab ---------- */
+
+function ExpenseForm({ editing, categories, onAdd, onSave, onCancel }) {
+  const [date, setDate] = useState(editing ? editing.date : todayISO());
+  const [category, setCategory] = useState(editing ? editing.category : '');
+  const [description, setDescription] = useState(editing ? editing.description : '');
+  const [amount, setAmount] = useState(editing ? String(editing.amount) : '');
+  const [spread, setSpread] = useState(!!(editing && editing.accrualMonths > 1));
+  const [months, setMonths] = useState(editing && editing.accrualMonths > 1 ? String(editing.accrualMonths) : '');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!date || !category || !description.trim() || !amount) { setError('Fill in all required fields.'); return; }
+    if (!Number.isInteger(Number(amount)) || Number(amount) <= 0) { setError('Amount must be a whole number greater than zero.'); return; }
+    if (spread && (!Number.isInteger(Number(months)) || Number(months) < 2)) { setError('Enter 2 or more months to spread this expense over.'); return; }
+    setError(''); setSaving(true);
+    const rec = { date, category, description: description.trim(), amount: Number(amount), ...(spread ? { accrualMonths: Number(months) } : {}) };
+    try {
+      const err = editing ? await onSave(editing.id, rec) : await onAdd(rec);
+      if (!err) { if (editing) onCancel(); else { setDescription(''); setAmount(''); setSpread(false); setMonths(''); } }
+    } finally { setSaving(false); }
+  }
+  return (
+    <form onSubmit={submit} className="card col g4" style={{ maxWidth: 520 }}>
+      <SectionTitle>{editing ? 'Edit expense' : 'New expense'}</SectionTitle>
+      <div className="row g4 stack-sm">
+        <Field label="Date"><TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+        <Field label="Category">
+          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+            <option value="">{categories.length ? 'Select category' : 'Add categories in Settings'}</option>
+            {categories.map((c) => <option key={c}>{c}</option>)}
+          </Select>
+        </Field>
+      </div>
+      <Field label="Description"><TextInput type="text" placeholder="e.g. Firewood delivery, 2 cords" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
+      <Field label="Amount"><MoneyInput value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+      <div className="col g2" style={{ border: `1px solid ${C.line}`, borderRadius: 6, padding: 12 }}>
+        <label className="row g2 small" style={{ cursor: 'pointer' }}>
+          <input type="checkbox" checked={spread} onChange={(e) => setSpread(e.target.checked)} />
+          Spread over several months (insurance, roof repair, appliance…)
+        </label>
+        {spread ? <Field label="Number of months" hint={Number(months) >= 2 && Number(amount) > 0 ? `≈ ${fmtMoney(Math.floor(Number(amount) / Number(months)))} per month starting ${fmtDate(date)}` : undefined}>
+          <TextInput type="number" min="2" step="1" placeholder="e.g. 12" value={months} onChange={(e) => setMonths(e.target.value)} />
+        </Field> : null}
+      </div>
+      {error ? <div className="small" style={{ color: C.clay }}>{error}</div> : null}
+      <div className="row g2" style={{ justifyContent: 'flex-end' }}>
+        {editing ? <Btn type="button" kind="ghost" onClick={onCancel}>Cancel</Btn> : null}
+        <Btn type="submit" disabled={saving} accent={C.clay}>{saving ? <Icon.Loader size={14} className="spin" /> : editing ? <Icon.Check size={14} /> : <Icon.Plus size={14} />}{editing ? 'Save changes' : 'Add expense'}</Btn>
+      </div>
+    </form>
+  );
+}
+
+function ExpensesTab({ expenses, categories, onAdd, onSave, onRemove }) {
+  const [editing, setEditing] = useState(null);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [category, setCategory] = useState('');
+  const rows = useMemo(() => expenses.filter((e) => (!from || e.date >= from) && (!to || e.date <= to) && (!category || e.category === category)).sort((a, b) => b.date.localeCompare(a.date)), [expenses, from, to, category]);
+  const total = rows.reduce((s, e) => s + e.amount, 0);
+  return (
+    <div className="col g4">
+      <ExpenseForm key={editing ? editing.id : 'new'} editing={editing} categories={categories} onAdd={onAdd} onSave={onSave} onCancel={() => setEditing(null)} />
+      <div className="row g3 wrap small soft">
+        <span>From</span><TextInput type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 'auto' }} />
+        <span>To</span><TextInput type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 'auto' }} />
+        <Select value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: 'auto' }}><option value="">All categories</option>{categories.map((c) => <option key={c}>{c}</option>)}</Select>
+        {from || to || category ? <button className="btn-link" onClick={() => { setFrom(''); setTo(''); setCategory(''); }}>Clear filters</button> : null}
+        <span style={{ marginLeft: 'auto' }}>{rows.length} expense{rows.length === 1 ? '' : 's'} · <span className="tabular" style={{ color: C.ink }}>{fmtMoney(total)}</span></span>
+      </div>
+      {rows.length === 0 ? <EmptyState text={expenses.length ? 'No expenses match these filters.' : 'No expenses yet.'} /> : (
+        <div className="card scroll-x" style={{ padding: '4px 16px' }}>
+          <table>
+            <thead><tr><th>Date</th><th>Category</th><th>Description</th><th className="num">Amount</th><th></th></tr></thead>
+            <tbody>
+              {rows.map((e) => (
+                <tr key={e.id}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(e.date)}</td>
+                  <td>{e.category}</td>
+                  <td>{e.description}{e.accrualMonths > 1 ? <div className="xs soft">spread over {e.accrualMonths} months</div> : null}</td>
+                  <td className="num tabular">{fmtMoney(e.amount)}</td>
+                  <td><RowActions onEdit={() => { setEditing(e); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={() => { if (window.confirm('Delete this expense?')) onRemove(e.id); }} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- tasks tab ---------- */
+
+function TasksTab({ tasks, cabins, staff, onAdd, onSave, onRemove }) {
+  const [dueDate, setDueDate] = useState(todayISO());
+  const [type, setType] = useState(TASK_TYPES[0]);
+  const [cabin, setCabin] = useState('');
+  const [description, setDescription] = useState('');
+  const [assignee, setAssignee] = useState('');
+  const [error, setError] = useState('');
+  const today = todayISO();
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!dueDate || !description.trim()) { setError('Add a due date and a description.'); return; }
+    setError('');
+    const err = await onAdd({ dueDate, type, cabin, description: description.trim(), assignee, done: false });
+    if (!err) setDescription('');
+  }
+  const open = tasks.filter((t) => !t.done).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const done = tasks.filter((t) => t.done).sort((a, b) => b.dueDate.localeCompare(a.dueDate)).slice(0, 15);
+  const TaskRow = ({ t }) => (
+    <tr>
+      <td style={{ width: 28 }}><input type="checkbox" checked={t.done} onChange={() => onSave(t.id, { ...t, done: !t.done })} aria-label="Mark done" /></td>
+      <td style={{ whiteSpace: 'nowrap', color: !t.done && t.dueDate < today ? C.clay : C.ink }}>{fmtShort(t.dueDate)}{!t.done && t.dueDate < today ? <div className="xs">overdue</div> : null}</td>
+      <td><span className="chip" style={{ background: C.timberSoft, color: C.timber }}>{t.type}</span></td>
+      <td style={{ textDecoration: t.done ? 'line-through' : 'none', color: t.done ? C.inkSoft : C.ink }}>{t.description}<div className="xs soft">{[t.cabin, t.assignee].filter(Boolean).join(' · ')}</div></td>
+      <td><RowActions onDelete={() => onRemove(t.id)} /></td>
+    </tr>
+  );
+  return (
+    <div className="col g4">
+      <form onSubmit={submit} className="card col g4" style={{ maxWidth: 620 }}>
+        <SectionTitle>New task</SectionTitle>
+        <div className="row g4 stack-sm">
+          <Field label="Due"><TextInput type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></Field>
+          <Field label="Type"><Select value={type} onChange={(e) => setType(e.target.value)}>{TASK_TYPES.map((t) => <option key={t}>{t}</option>)}</Select></Field>
+          <Field label="Cabin"><Select value={cabin} onChange={(e) => setCabin(e.target.value)}><option value="">All / property</option>{cabins.map((c) => <option key={c}>{c}</option>)}</Select></Field>
+        </div>
+        <div className="row g4 stack-sm">
+          <Field label="What needs doing"><TextInput type="text" placeholder="e.g. Refill propane, check water pump" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
+          <Field label="Assigned to"><Select value={assignee} onChange={(e) => setAssignee(e.target.value)}><option value="">Unassigned</option>{staff.map((s) => <option key={s}>{s}</option>)}</Select></Field>
+        </div>
+        {error ? <div className="small" style={{ color: C.clay }}>{error}</div> : null}
+        <div className="row" style={{ justifyContent: 'flex-end' }}><Btn type="submit" accent={C.timber}><Icon.Plus size={14} /> Add task</Btn></div>
+      </form>
+      <SectionTitle>Open ({open.length})</SectionTitle>
+      {open.length === 0 ? <EmptyState text="Nothing to do — enjoy the quiet." /> : <div className="card scroll-x" style={{ padding: '4px 16px' }}><table><tbody>{open.map((t) => <TaskRow key={t.id} t={t} />)}</tbody></table></div>}
+      {done.length ? <><SectionTitle>Recently done</SectionTitle><div className="card scroll-x" style={{ padding: '4px 16px' }}><table><tbody>{done.map((t) => <TaskRow key={t.id} t={t} />)}</tbody></table></div></> : null}
+    </div>
+  );
+}
+
+/* ---------- dashboard tab ---------- */
+
+function DashboardTab({ bookings, expenses, tasks, cabins, onOpenBooking, onGoTasks }) {
+  const today = todayISO();
+  const currentYear = Number(today.slice(0, 4));
+  const [year, setYear] = useState(currentYear);
+  const years = useMemo(() => {
+    const s = new Set([currentYear]);
+    bookings.forEach((b) => { s.add(Number(b.checkIn.slice(0, 4))); s.add(Number(b.checkOut.slice(0, 4))); });
+    expenses.forEach((e) => s.add(Number(e.date.slice(0, 4))));
+    return [...s].sort((a, b) => b - a);
+  }, [bookings, expenses, currentYear]);
+  const y = useMemo(() => computeYear(bookings, expenses, year, cabins.length, today), [bookings, expenses, year, cabins.length, today]);
+  const net = y.revenue - y.commission - y.expenses;
+
+  const live = bookings.filter((b) => ['Confirmed', 'Checked in', 'Inquiry'].includes(b.status));
+  const inHouse = live.filter((b) => b.status !== 'Inquiry' && b.checkIn <= today && b.checkOut > today);
+  const horizon = addDays(today, 14);
+  const events = [];
+  live.forEach((b) => {
+    if (b.checkIn >= today && b.checkIn <= horizon) events.push({ date: b.checkIn, kind: 'Arrival', b });
+    if (b.checkOut >= today && b.checkOut <= horizon && b.status !== 'Inquiry') events.push({ date: b.checkOut, kind: 'Departure', b });
+  });
+  events.sort((a, b) => a.date.localeCompare(b.date) || (a.kind === 'Departure' ? -1 : 1));
+  const owed = bookings.filter((b) => COUNTED.includes(b.status) && bookingBalance(b) > 0);
+  const owedTotal = owed.reduce((s, b) => s + bookingBalance(b), 0);
+  const openTasks = tasks.filter((t) => !t.done).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const overdue = openTasks.filter((t) => t.dueDate < today).length;
+
+  return (
+    <div className="col g6">
+      <div className="row g3">
+        <span className="small soft">Year</span>
+        <Select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ width: 'auto' }}>{years.map((v) => <option key={v}>{v}</option>)}</Select>
+      </div>
+      <div className="row g3 wrap">
+        <KpiCard label={`Revenue ${year}`} value={fmtMoney(y.revenue)} sub="Booked nights + cleaning fees" accent={C.forest} />
+        <KpiCard label="Expenses" value={fmtMoney(y.expenses)} sub="Spread costs counted monthly" accent={C.clay} />
+        <KpiCard label="Net" value={fmtMoney(net)} sub={y.commission ? `After ${fmtMoney(y.commission)} platform commissions` : 'Revenue − expenses'} accent={net >= 0 ? C.forest : C.clay} />
+        <KpiCard label="Occupancy" value={y.occupancy === null ? '—' : `${y.occupancy}%`} sub={`${y.nightsToDate} nights sold${year === currentYear ? ' so far this year' : ''}`} accent={C.timber} />
+        <KpiCard label="Avg. nightly rate" value={y.adr === null ? '—' : fmtMoney(y.adr)} sub="Per night sold" accent={C.timber} />
+        <KpiCard label="Balances due" value={fmtMoney(owedTotal)} sub={`${owed.length} booking${owed.length === 1 ? '' : 's'} not fully paid`} accent={owedTotal ? C.clay : C.forest} />
+      </div>
+      <div className="row g4 wrap" style={{ alignItems: 'stretch' }}>
+        <div className="card grow" style={{ minWidth: 300 }}>
+          <SectionTitle>Revenue vs expenses</SectionTitle>
+          <ChartCanvas type="bar" money labels={MONTH_NAMES} datasets={[{ label: 'Revenue', values: y.rev.map((v, i) => v - y.comm[i]), color: C.forest }, { label: 'Expenses', values: y.exp, color: C.clay }]} />
+          <div className="xs soft" style={{ marginTop: 6 }}>Revenue shown after platform commissions.</div>
+        </div>
+        <div className="card grow" style={{ minWidth: 300 }}>
+          <SectionTitle>Occupancy by month</SectionTitle>
+          <ChartCanvas type="line" percent labels={MONTH_NAMES} datasets={[{ label: 'Occupancy', values: y.monthOccupancy, color: C.timber }]} />
+          <div className="xs soft" style={{ marginTop: 6 }}>Includes bookings still to come. {cabins.length > 1 ? `Across ${cabins.length} cabins.` : ''}</div>
+        </div>
+      </div>
+      <div className="row g4 wrap" style={{ alignItems: 'flex-start' }}>
+        <div className="card grow" style={{ minWidth: 300 }}>
+          <SectionTitle>Next 14 days</SectionTitle>
+          {inHouse.length ? <div className="small" style={{ marginBottom: 8 }}><span className="soft">In the cabin now: </span>{inHouse.map((b) => `${b.guest} (${b.cabin}, until ${fmtShort(b.checkOut)})`).join(' · ')}</div> : null}
+          {events.length === 0 ? <div className="small soft">No arrivals or departures.</div> : (
+            <table><tbody>
+              {events.map((ev, i) => (
+                <tr key={i} style={{ cursor: 'pointer' }} onClick={() => onOpenBooking(ev.b)}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{ev.date === today ? 'Today' : fmtShort(ev.date)}</td>
+                  <td><span className="chip" style={ev.kind === 'Arrival' ? { background: C.forestSoft, color: C.forest } : { background: C.timberSoft, color: C.timber }}>{ev.kind}</span></td>
+                  <td>{ev.b.guest}<div className="xs soft">{ev.b.cabin}{ev.kind === 'Arrival' ? ` · ${ev.b.guests} guest${ev.b.guests > 1 ? 's' : ''}` : ''}{ev.b.status === 'Inquiry' ? ' · inquiry' : ''}</div></td>
+                  <td className="num tabular xs" style={{ color: bookingBalance(ev.b) > 0 ? C.clay : C.forest }}>{bookingBalance(ev.b) > 0 ? `${fmtMoney(bookingBalance(ev.b))} due` : 'Paid'}</td>
+                </tr>
+              ))}
+            </tbody></table>
+          )}
+        </div>
+        <div className="card grow" style={{ minWidth: 300 }}>
+          <SectionTitle right={<button className="btn-link" onClick={onGoTasks}>All tasks</button>}>To do{overdue ? <span className="small" style={{ color: C.clay }}> · {overdue} overdue</span> : null}</SectionTitle>
+          {openTasks.length === 0 ? <div className="small soft">Nothing open.</div> : (
+            <table><tbody>
+              {openTasks.slice(0, 6).map((t) => (
+                <tr key={t.id}>
+                  <td style={{ whiteSpace: 'nowrap', color: t.dueDate < today ? C.clay : C.ink }}>{fmtShort(t.dueDate)}</td>
+                  <td><span className="chip" style={{ background: C.timberSoft, color: C.timber }}>{t.type}</span></td>
+                  <td>{t.description}<div className="xs soft">{[t.cabin, t.assignee].filter(Boolean).join(' · ')}</div></td>
+                </tr>
+              ))}
+            </tbody></table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- settings tab ---------- */
+
+function SettingsTab({ lists, onExport, onBackup, onRestore }) {
+  const fileRef = useRef(null);
+  return (
+    <div className="col g4" style={{ maxWidth: 720 }}>
+      <ListManager title="Cabins" hint="Each cabin gets its own row on the calendar and counts toward occupancy." items={lists.cabins[0]} onAdd={lists.cabins[1]} onRemove={lists.cabins[2]} placeholder="e.g. Pine Cabin" />
+      <ListManager title="Booking channels" hint="Where reservations come from." items={lists.channels[0]} onAdd={lists.channels[1]} onRemove={lists.channels[2]} placeholder="e.g. Facebook" />
+      <ListManager title="Expense categories" items={lists.categories[0]} onAdd={lists.categories[1]} onRemove={lists.categories[2]} placeholder="e.g. Septic service" />
+      <ListManager title="Team" hint="People you can assign tasks to (cleaner, caretaker…)." items={lists.staff[0]} onAdd={lists.staff[1]} onRemove={lists.staff[2]} placeholder="Name" />
+      <div className="card col g3">
+        <div style={{ fontSize: 15 }}>Data</div>
+        <div className="small soft">
+          {sb ? 'Connected to your Supabase project — data is shared across all devices.'
+            : 'Local mode: everything is saved in this browser on this computer only. Download a backup regularly, and use a Supabase project (see CABIN_NOTES.md) to share data between devices.'}
+        </div>
+        <div className="row g2 wrap">
+          <Btn kind="ghost" onClick={onExport}><Icon.Download size={14} /> Export to Excel</Btn>
+          {!sb ? <>
+            <Btn kind="ghost" onClick={onBackup}><Icon.Download size={14} /> Download backup (.json)</Btn>
+            <Btn kind="ghost" onClick={() => fileRef.current && fileRef.current.click()}><Icon.Upload size={14} /> Restore backup</Btn>
+            <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) onRestore(f); }} />
+          </> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- login (Supabase mode only) ---------- */
+
+function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit(e) {
+    e.preventDefault(); setBusy(true); setError('');
+    const { error: err } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+    if (err) setError(err.message);
+    setBusy(false);
+  }
+  return (
+    <div className="row" style={{ minHeight: '100vh', justifyContent: 'center', padding: 16 }}>
+      <form onSubmit={submit} className="card col g4" style={{ width: '100%', maxWidth: 360 }}>
+        <h1 className="serif" style={{ margin: 0, fontSize: 24, fontWeight: 400 }}>{APP_NAME}</h1>
+        <Field label="Email"><TextInput type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+        <Field label="Password"><TextInput type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+        {error ? <div className="small" style={{ color: C.clay }}>{error}</div> : null}
+        <Btn type="submit" disabled={busy}>{busy ? <Icon.Loader size={14} className="spin" /> : null}Sign in</Btn>
+      </form>
+    </div>
+  );
+}
+
+/* ---------- app shell ---------- */
+
+function Main({ session }) {
+  const [tab, setTab] = useState('dashboard');
+  const [toast, setToast] = useState('');
+  const [editRequest, setEditRequest] = useState(null);
+  const toastTimer = useRef(null);
+  const notify = useCallback((text) => { setToast(text); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 5000); }, []);
+
+  const bookings = useTable('bookings', bookingFromDb, bookingToDb, 'check_in', notify);
+  const expenses = useTable('expenses', expenseFromDb, expenseToDb, 'date', notify);
+  const tasks = useTable('tasks', taskFromDb, taskToDb, 'due_date', notify);
+  const lists = { cabins: useConfigList('cabins'), channels: useConfigList('channels'), categories: useConfigList('categories'), staff: useConfigList('staff') };
+
+  function openBooking(b) { setEditRequest(b); setTab('bookings'); }
+  const createCleaning = (b) => tasks.add({ dueDate: b.checkOut, type: 'Cleaning', cabin: b.cabin, description: `Turnover clean after ${b.guest}`, assignee: '', done: false });
+  const refreshAll = () => { bookings.refresh(); expenses.refresh(); tasks.refresh(); };
+
+  function exportExcel() {
+    const wb = XLSX.utils.book_new();
+    const add = (name, rows) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{}]), name);
+    add('Bookings', bookings.items.map((b) => ({ Guest: b.guest, Phone: b.phone, Cabin: b.cabin, 'Check-in': b.checkIn, 'Check-out': b.checkOut, Nights: bookingNights(b), Guests: b.guests, 'Nightly rate': b.nightlyRate, 'Cleaning fee': b.cleaningFee, Total: bookingTotal(b), Commission: b.commission, Paid: b.amountPaid, Balance: bookingBalance(b), Channel: b.channel, Status: b.status, 'Payment method': b.paymentMethod, Notes: b.notes })));
+    add('Expenses', expenses.items.map((e) => ({ Date: e.date, Category: e.category, Description: e.description, Amount: e.amount, 'Spread over months': e.accrualMonths || '' })));
+    add('Expenses (monthly)', expenses.items.flatMap((e) => explodeExpense(e).map((s) => ({ Month: s.month, Date: s.date, Category: e.category, Description: e.description, Amount: s.amount }))));
+    add('Tasks', tasks.items.map((t) => ({ Due: t.dueDate, Type: t.type, Cabin: t.cabin, Description: t.description, 'Assigned to': t.assignee, Done: t.done ? 'yes' : 'no' })));
+    XLSX.writeFile(wb, `cabin-ledger-${todayISO()}.xlsx`);
+  }
+  function downloadBackup() {
+    const dump = {}; LOCAL_KEYS.forEach((k) => { dump[k] = lsRead(k, k === 'config' ? {} : []); });
+    triggerDownload(new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' }), `cabin-ledger-backup-${todayISO()}.json`);
+  }
+  async function restoreBackup(file) {
+    try {
+      const dump = JSON.parse(await file.text());
+      if (!LOCAL_KEYS.some((k) => k in dump)) throw new Error('not a backup');
+      if (!window.confirm('Restoring replaces everything currently saved in this browser. Continue?')) return;
+      LOCAL_KEYS.forEach((k) => { if (k in dump) lsWrite(k, dump[k]); });
+      window.location.reload();
+    } catch (e) { notify("That file isn't a Cabin Ledger backup."); }
+  }
+
+  const cabinNames = lists.cabins[0];
+  return (
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px 64px' }}>
+      <header className="row between wrap g3" style={{ padding: '20px 0 12px' }}>
+        <div>
+          <h1 className="serif" style={{ margin: 0, fontSize: 26, fontWeight: 400 }}>{APP_NAME}</h1>
+          <div className="xs soft">{sb ? `Signed in as ${session.user.email}` : 'Local mode · data saved in this browser'}</div>
+        </div>
+        <div className="row g2">
+          <Btn kind="ghost" onClick={refreshAll}><Icon.Refresh size={14} /> Refresh</Btn>
+          <Btn kind="ghost" onClick={exportExcel}><Icon.Download size={14} /> Excel</Btn>
+          {sb ? <Btn kind="ghost" onClick={() => sb.auth.signOut()}>Sign out</Btn> : null}
+        </div>
+      </header>
+      <nav className="tabs" style={{ marginBottom: 20 }}>
+        {NAV.map((n) => { const I = Icon[n.icon]; return <button key={n.id} className={`tab${tab === n.id ? ' active' : ''}`} onClick={() => setTab(n.id)}><I size={15} />{n.label}</button>; })}
+      </nav>
+      {tab === 'dashboard' ? <DashboardTab bookings={bookings.items} expenses={expenses.items} tasks={tasks.items} cabins={cabinNames} onOpenBooking={openBooking} onGoTasks={() => setTab('tasks')} /> : null}
+      {tab === 'calendar' ? <CalendarTab bookings={bookings.items} cabins={cabinNames} onOpenBooking={openBooking} /> : null}
+      {tab === 'bookings' ? <BookingsTab bookings={bookings.items} cabins={cabinNames} channels={lists.channels[0]} editRequest={editRequest} clearEditRequest={() => setEditRequest(null)}
+        onAdd={bookings.add} onSave={bookings.save} onRemove={bookings.remove} onCreateCleaning={createCleaning} /> : null}
+      {tab === 'expenses' ? <ExpensesTab expenses={expenses.items} categories={lists.categories[0]} onAdd={expenses.add} onSave={expenses.save} onRemove={expenses.remove} /> : null}
+      {tab === 'tasks' ? <TasksTab tasks={tasks.items} cabins={cabinNames} staff={lists.staff[0]} onAdd={tasks.add} onSave={tasks.save} onRemove={tasks.remove} /> : null}
+      {tab === 'settings' ? <SettingsTab lists={lists} onExport={exportExcel} onBackup={downloadBackup} onRestore={restoreBackup} /> : null}
+      {toast ? <div role="status" style={{ position: 'fixed', bottom: 20, right: 20, background: C.ink, color: C.paper, padding: '8px 14px', borderRadius: 6, fontSize: 13, maxWidth: 360 }}>{toast}</div> : null}
+    </div>
+  );
+}
+
+function App() {
+  const [session, setSession] = useState(undefined); // undefined = still checking
+  useEffect(() => {
+    if (!sb) { setSession(null); return; }
+    sb.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data } = sb.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => data.subscription.unsubscribe();
+  }, []);
+  if (session === undefined) return <EmptyState text="Loading…" />;
+  if (sb && !session) return <Login />;
+  return <Main session={session} />;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
