@@ -98,17 +98,17 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
 /* ---------- configuration ---------- */
 
 const APP_NAME = 'Cabin Ledger';
-const CURRENCY = 'USD';
+const CURRENCY = 'COP';
 
 /* Leave both empty to run in LOCAL MODE: data is saved in this browser only (fine for trying
    it out or for a single computer). Fill both in to store data in your own Supabase project
    so every device sees the same bookings -- see cabin-schema.sql and CABIN_NOTES.md. */
-const SUPABASE_URL = '';
-const SUPABASE_ANON_KEY = '';
+const SUPABASE_URL = 'https://ozvxqfkraskcxbxkrdoc.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96dnhxZmtyYXNrY3hieGtyZG9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzMDY1MjcsImV4cCI6MjEwODg4MjUyN30.ZrwTOO0z1hdmSBpwfoHJpwpb5qxH07yDk-7j6Bu3uDY';
 
 /* The cabin's own time zone, an IANA name such as 'America/Bogota' or 'Europe/Madrid'. "Today" is read in this
    zone so a late-evening entry isn't dated tomorrow. Empty = use the device clock. */
-const TIME_ZONE = '';
+const TIME_ZONE = 'America/Bogota';
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: 'Dashboard' },
@@ -152,7 +152,7 @@ function fmtDate(s) { if (!s) return ''; const [y, m, d] = s.split('-').map(Numb
 function fmtShort(s) { const [, m, d] = s.split('-').map(Number); return `${MONTH_NAMES[m - 1]} ${d}`; }
 
 function fmtMoney(n) {
-  return (Number(n) || 0).toLocaleString('en-US', { style: 'currency', currency: CURRENCY, maximumFractionDigits: 0 });
+  return (Number(n) || 0).toLocaleString('es-CO', { style: 'currency', currency: CURRENCY, maximumFractionDigits: 0 });
 }
 function cssVar(name, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();

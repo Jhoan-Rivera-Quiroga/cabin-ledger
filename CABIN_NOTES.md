@@ -24,7 +24,7 @@ A rural tourist cabin version of the CasaBerry "Ledger" app. Same approach: one 
 - **Occupancy KPI** = nights sold up to today ÷ (cabins × days elapsed in the range). The monthly chart includes future bookings.
 - **Check-out day is free**: a stay occupies nights `checkIn … checkOut-1`, so a same-day turnover is not a conflict.
 - Records date filters: bookings by check-in day, expenses by payment date.
-- Money is whole numbers in `CURRENCY` (default USD, top of the script).
+- Money is whole numbers in `CURRENCY` (COP, formatted es-CO, top of the script).
 
 ## Storage
 
