@@ -14,12 +14,8 @@ create table bookings (
   check_in date not null,
   check_out date not null,
   guests integer not null default 1,
-  nightly_rate integer not null,
-  cleaning_fee integer not null default 0,
-  commission integer not null default 0,
+  total integer not null,
   channel text,
-  status text not null default 'Confirmed',
-  amount_paid integer not null default 0,
   payment_method text,
   notes text,
   check (check_out > check_in)
@@ -34,17 +30,7 @@ create table expenses (
   accrual_months integer
 );
 
-create table tasks (
-  id uuid primary key default gen_random_uuid(),
-  due_date date not null,
-  type text not null,
-  cabin text,
-  description text not null,
-  assignee text,
-  done boolean not null default false
-);
-
--- key is one of: 'cabins', 'channels', 'categories', 'staff'
+-- key is one of: 'cabins', 'channels', 'categories'
 create table config (
   key text primary key,
   items jsonb not null default '[]'::jsonb
@@ -54,10 +40,8 @@ create table config (
 -- policies require a signed-in user. The app shows a login screen in Supabase mode.
 alter table bookings enable row level security;
 alter table expenses enable row level security;
-alter table tasks enable row level security;
 alter table config enable row level security;
 
 create policy "signed-in users - bookings" on bookings for all to authenticated using (true) with check (true);
 create policy "signed-in users - expenses" on expenses for all to authenticated using (true) with check (true);
-create policy "signed-in users - tasks" on tasks for all to authenticated using (true) with check (true);
 create policy "signed-in users - config" on config for all to authenticated using (true) with check (true);

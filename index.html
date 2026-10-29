@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Cabin Ledger — Rural Cabin Manager</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#2F5233" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Cabin Ledger" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="icon" type="image/png" href="icon-192.png" />
+<style>
+  :root {
+    --paper: #F5F1E8;
+    --panel: #FFFFFF;
+    --ink: #262420;
+    --ink-soft: #6F6A5F;
+    --forest: #2F5233;
+    --forest-soft: #E4EAE1;
+    --clay: #A6482E;
+    --clay-soft: #F3E1DA;
+    --timber: #8A5A2B;
+    --timber-soft: #F1E6D6;
+    --line: #DDD6C6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1C1D19; --panel: #262822; --ink: #EDEAE0; --ink-soft: #A9A699;
+      --forest: #7FB88A; --forest-soft: #2A3B2C; --clay: #D98A6E; --clay-soft: #43302A;
+      --timber: #D1A263; --timber-soft: #3E3426; --line: #3B3D34;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .serif { font-family: Georgia, "Iowan Old Style", serif; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .row { display: flex; align-items: center; }
+  .col { display: flex; flex-direction: column; }
+  .wrap { flex-wrap: wrap; }
+  .grow { flex: 1 1 0%; min-width: 0; }
+  .between { justify-content: space-between; }
+  .g1 { gap: 4px; } .g2 { gap: 8px; } .g3 { gap: 12px; } .g4 { gap: 16px; } .g6 { gap: 24px; }
+  .small { font-size: 13px; } .xs { font-size: 12px; }
+  .soft { color: var(--ink-soft); }
+  .scroll-x { overflow-x: auto; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink-soft); font-weight: 400; white-space: nowrap; }
+  td.num, th.num { text-align: right; }
+  button { font-family: inherit; }
+  .btn { padding: 8px 14px; font-size: 14px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:disabled { opacity: 0.6; cursor: default; }
+  .btn-link { background: none; border: none; padding: 0; color: var(--forest); cursor: pointer; font-size: 12px; }
+  .icon-btn { background: none; border: none; cursor: pointer; padding: 2px; color: var(--ink-soft); display: inline-flex; }
+  .icon-btn:hover { color: var(--ink); }
+  .tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+  .tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 14px; font-size: 14px; color: var(--ink-soft); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .tab.active { color: var(--ink); border-bottom-color: var(--forest); }
+  .chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .bottom-nav { display: none; }
+  .banner { border-radius: 6px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  /* Phone layout: every phone rule lives in this one query, so wide screens are untouched. */
+  @media (max-width: 768px) {
+    .top-tabs { display: none !important; }
+    .bottom-nav { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+      background: var(--panel); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+    .bottom-nav button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+      padding: 9px 0 7px; background: none; border: none; font-size: 10px; font-family: inherit; cursor: pointer; min-width: 0; white-space: nowrap; }
+    .app-main { padding-left: 16px !important; padding-right: 16px !important;
+      padding-top: env(safe-area-inset-top) !important;
+      padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important; }
+    .stack-sm { flex-direction: column; align-items: stretch; }
+    input, select, textarea { font-size: 16px !important; } /* stops iPhone Safari zooming into every field */
+    td button, td .icon-btn { padding: 8px !important; }
+    .toast { position: fixed !important; left: 16px !important; right: 16px !important; max-width: none !important;
+      bottom: calc(76px + env(safe-area-inset-bottom)) !important; text-align: center; }
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+/* ---------- configuration ---------- */
+
+const APP_NAME = 'Cabin Ledger';
+const CURRENCY = 'USD';
+
+/* Leave both empty to run in LOCAL MODE: data is saved in this browser only (fine for trying
+   it out or for a single computer). Fill both in to store data in your own Supabase project
+   so every device sees the same bookings -- see cabin-schema.sql and CABIN_NOTES.md. */
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
+
+/* The cabin's own time zone, an IANA name such as 'America/Bogota' or 'Europe/Madrid'. "Today" is read in this
+   zone so a late-evening entry isn't dated tomorrow. Empty = use the device clock. */
+const TIME_ZONE = '';
+
+const NAV = [
+  { id: 'dashboard', label: 'Dashboard', icon: 'Dashboard' },
+  { id: 'bookings', label: 'Bookings', icon: 'Bed' },
+  { id: 'expenses', label: 'Expenses', icon: 'Receipt' },
+  { id: 'records', label: 'Records', icon: 'Table' },
+  { id: 'settings', label: 'Settings', icon: 'Gear' },
+];
+
+const PAYMENT_METHODS = ['Cash', 'Bank transfer', 'Card', 'Mobile payment', 'Platform payout', 'Other'];
+
+const DEFAULTS = {
+  cabins: ['Cabin 1'],
+  channels: ['Direct', 'Airbnb', 'Booking.com', 'Phone / WhatsApp', 'Referral'],
+  categories: ['Cleaning & laundry', 'Firewood & heating', 'Utilities', 'Maintenance & repairs', 'Supplies & amenities', 'Insurance & taxes', 'Marketing', 'Other'],
+};
+
+const C = {
+  paper: 'var(--paper)', panel: 'var(--panel)', ink: 'var(--ink)', inkSoft: 'var(--ink-soft)',
+  forest: 'var(--forest)', forestSoft: 'var(--forest-soft)', clay: 'var(--clay)', claySoft: 'var(--clay-soft)',
+  timber: 'var(--timber)', timberSoft: 'var(--timber-soft)', line: 'var(--line)',
+};
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/* ---------- date + money helpers (all dates are 'YYYY-MM-DD' strings, handled in UTC to dodge DST) ---------- */
+
+const DAY_MS = 86400000;
+const pad2 = (n) => String(n).padStart(2, '0');
+const parseISO = (s) => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+const toISO = (ms) => new Date(ms).toISOString().slice(0, 10);
+const addDays = (s, n) => toISO(parseISO(s) + n * DAY_MS);
+const nightsBetween = (a, b) => Math.round((parseISO(b) - parseISO(a)) / DAY_MS);
+function todayISO() {
+  if (TIME_ZONE) return new Date().toLocaleDateString('en-CA', { timeZone: TIME_ZONE }); // en-CA formats as YYYY-MM-DD
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate(); // m is 1-based
+function fmtDate(s) { if (!s) return ''; const [y, m, d] = s.split('-').map(Number); return `${MONTH_NAMES[m - 1]} ${d}, ${y}`; }
+function fmtShort(s) { const [, m, d] = s.split('-').map(Number); return `${MONTH_NAMES[m - 1]} ${d}`; }
+
+function fmtMoney(n) {
+  return (Number(n) || 0).toLocaleString('en-US', { style: 'currency', currency: CURRENCY, maximumFractionDigits: 0 });
+}
+function cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+function resolveColor(c) {
+  const m = /^var\((--[^)]+)\)$/.exec(c);
+  return m ? cssVar(m[1], '#888') : c;
+}
+function addMonths(monthKey, n) {
+  const [y, m] = monthKey.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
+}
+/** Splits an expense into monthly shares (for things like an annual insurance premium). The rounding
+ *  remainder lands in the last month so the shares always add up to the original amount. */
+function explodeExpense(r) {
+  const months = r.accrualMonths && r.accrualMonths > 1 ? r.accrualMonths : 1;
+  const startKey = r.date.slice(0, 7);
+  const day = Number(r.date.slice(8, 10));
+  const base = Math.floor(r.amount / months);
+  const remainder = r.amount - base * months;
+  const rows = [];
+  for (let i = 0; i < months; i++) {
+    const month = addMonths(startKey, i);
+    const [y, m] = month.split('-').map(Number);
+    rows.push({ month, date: `${month}-${pad2(Math.min(day, daysInMonth(y, m)))}`, amount: i === months - 1 ? base + remainder : base });
+  }
+  return rows;
+}
+
+/* ---------- booking maths ---------- */
+
+const bookingNights = (b) => Math.max(0, nightsBetween(b.checkIn, b.checkOut));
+const bookingAvgNight = (b) => (bookingNights(b) ? Math.round(b.total / bookingNights(b)) : 0);
+/** The booking total spread over its nights: an even split, with the rounding remainder on the last night. */
+function nightShares(b) {
+  const n = bookingNights(b);
+  if (!n) return [];
+  const base = Math.floor(b.total / n);
+  return Array.from({ length: n }, (_, i) => ({ date: addDays(b.checkIn, i), amount: i === n - 1 ? b.total - base * (n - 1) : base }));
+}
+function findConflict(bookings, cand, ignoreId) {
+  return bookings.find((b) => b.id !== ignoreId && b.cabin === cand.cabin && b.checkIn < cand.checkOut && cand.checkIn < b.checkOut) || null;
+}
+
+/** Everything the dashboard shows for the chosen date range (empty from/to = everything on record).
+ *  Revenue is recognised per night (a stay that crosses a month end is split). */
+function computeRange(bookings, expenses, from, to, cabinCount, today) {
+  const all = [];
+  bookings.forEach((b) => { all.push(b.checkIn, addDays(b.checkOut, -1)); });
+  expenses.forEach((e) => explodeExpense(e).forEach((s) => all.push(s.date)));
+  all.sort();
+  const start = from || all[0] || today;
+  const end = to || all[all.length - 1] || today;
+  if (start > end) return null;
+
+  const months = [];
+  for (let k = start.slice(0, 7); k <= end.slice(0, 7) && months.length < 120; k = addMonths(k, 1)) months.push(k);
+  const idx = {}; months.forEach((k, i) => { idx[k] = i; });
+  const rev = Array(months.length).fill(0), exp = Array(months.length).fill(0), nights = Array(months.length).fill(0);
+  let nightsToDate = 0, lodgingToDate = 0;
+  const chan = {};
+
+  bookings.forEach((b) => {
+    nightShares(b).forEach(({ date: d, amount }) => {
+      if (d < start || d > end || !(d.slice(0, 7) in idx)) return;
+      const i = idx[d.slice(0, 7)];
+      rev[i] += amount; nights[i] += 1;
+      chan[b.channel || 'No channel'] = (chan[b.channel || 'No channel'] || 0) + amount;
+      if (d <= today) { nightsToDate += 1; lodgingToDate += amount; }
+    });
+  });
+  expenses.forEach((e) => explodeExpense(e).forEach((s) => {
+    if (s.date < start || s.date > end || !(s.month in idx)) return;
+    exp[idx[s.month]] += s.amount;
+  }));
+
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
+  const cabins = Math.max(1, cabinCount);
+  const elapsedEnd = end < today ? end : today;
+  const elapsed = elapsedEnd >= start ? nightsBetween(start, elapsedEnd) + 1 : 0;
+  const multiYear = start.slice(0, 4) !== end.slice(0, 4);
+  const monthOccupancy = months.map((k, i) => {
+    const [y, m] = k.split('-').map(Number);
+    const a = k + '-01' > start ? k + '-01' : start;
+    const lastDay = `${k}-${pad2(daysInMonth(y, m))}`;
+    const z = lastDay < end ? lastDay : end;
+    const days = nightsBetween(a, z) + 1;
+    return Math.round((nights[i] / (days * cabins)) * 1000) / 10;
+  });
+  return {
+    start, end, labels: months.map((k) => MONTH_NAMES[Number(k.slice(5, 7)) - 1] + (multiYear ? ` '${k.slice(2, 4)}` : '')),
+    rev, exp, monthOccupancy,
+    byChannel: Object.entries(chan).sort((a, b) => b[1] - a[1]),
+    revenue: sum(rev), expenses: sum(exp),
+    occupancy: elapsed ? Math.round((nightsToDate / (elapsed * cabins)) * 1000) / 10 : null,
+    adr: nightsToDate ? Math.round(lodgingToDate / nightsToDate) : null,
+    nightsToDate,
+  };
+}
+
+/* ---------- storage: browser (local mode) or Supabase ---------- */
+
+const sb = (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const LS_PREFIX = 'cabinledger:';
+const newId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+const lsRead = (key, fallback) => { try { const v = localStorage.getItem(LS_PREFIX + key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } };
+const lsWrite = (key, value) => { try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); return null; } catch (e) { return { message: 'Could not save in this browser (storage full or blocked).' }; } };
+const LOCAL_KEYS = ['bookings', 'expenses', 'config'];
+
+const store = sb ? {
+  async list(table, col) { const { data, error } = await sb.from(table).select('*').order(col, { ascending: true }); return { data: data || [], error }; },
+  async insert(table, rows) { const { error } = await sb.from(table).insert(rows); return error; },
+  async update(table, id, row) { const { error } = await sb.from(table).update(row).eq('id', id); return error; },
+  async remove(table, id) { const { error } = await sb.from(table).delete().eq('id', id); return error; },
+  // A failed read must never look like "nothing saved yet" (that would trigger seeding defaults over real data), so the error is returned.
+  async getConfig(key) { const { data, error } = await sb.from('config').select('items').eq('key', key).maybeSingle(); return { items: data ? data.items : null, error }; },
+  async setConfig(key, items) { const { error } = await sb.from('config').upsert({ key, items }); return error; },
+} : {
+  async list(table, col) { return { data: lsRead(table, []).sort((a, b) => String(a[col] || '').localeCompare(String(b[col] || ''))), error: null }; },
+  async insert(table, rows) { return lsWrite(table, [...lsRead(table, []), ...rows.map((r) => ({ ...r, id: newId() }))]); },
+  async update(table, id, row) { return lsWrite(table, lsRead(table, []).map((r) => (r.id === id ? { ...row, id } : r))); },
+  async remove(table, id) { return lsWrite(table, lsRead(table, []).filter((r) => r.id !== id)); },
+  async getConfig(key) { return { items: lsRead('config', {})[key] || null, error: null }; },
+  async setConfig(key, items) { return lsWrite('config', { ...lsRead('config', {}), [key]: items }); },
+};
+
+/* snake_case database rows <-> camelCase app records */
+// Rows saved by the first version (nightly_rate + cleaning_fee) are converted to a total when read, so nothing already entered is lost.
+const bookingFromDb = (r) => ({ id: r.id, guest: r.guest, phone: r.phone || '', cabin: r.cabin, checkIn: r.check_in, checkOut: r.check_out, guests: r.guests,
+  total: r.total != null ? r.total : (r.nightly_rate || 0) * Math.max(0, nightsBetween(r.check_in, r.check_out)) + (r.cleaning_fee || 0),
+  channel: r.channel || '', paymentMethod: r.payment_method || '', notes: r.notes || '' });
+const bookingToDb = (b) => ({ guest: b.guest, phone: b.phone || null, cabin: b.cabin, check_in: b.checkIn, check_out: b.checkOut, guests: b.guests, total: b.total, channel: b.channel || null, payment_method: b.paymentMethod || null, notes: b.notes || null });
+const expenseFromDb = (r) => ({ id: r.id, date: r.date, category: r.category, description: r.description, amount: r.amount, ...(r.accrual_months ? { accrualMonths: r.accrual_months } : {}) });
+const expenseToDb = (e) => ({ date: e.date, category: e.category, description: e.description, amount: e.amount, accrual_months: e.accrualMonths || null });
+
+/* Saving rules (so the app never implies something was saved when it wasn't):
+   - with a remote database, every write is refused up front while offline;
+   - lists and tables only update after the database confirms the write (no optimistic updates);
+   - a failed write returns its error to the form, which stays open with the data still in it;
+   - a failed read is reported through onLoadError and is never treated as "no data". */
+const OFFLINE_MSG = 'No internet connection - nothing was saved.';
+const isOffline = () => !!sb && !navigator.onLine;
+const errMsg = (e) => (e && e.message) || 'Something went wrong — nothing was saved.';
+
+function useTable(table, fromDb, toDb, orderCol, onError, onLoadError, tick) {
+  const [items, setItems] = useState([]);
+  const refresh = useCallback(async () => {
+    let res;
+    try { res = await store.list(table, orderCol); } catch (e) { res = { error: e }; }
+    if (res.error) { onLoadError(table, `Couldn't load ${table}: ${errMsg(res.error)}`); return; }
+    onLoadError(table, '');
+    setItems(res.data.map(fromDb));
+  }, [table, orderCol]);
+  useEffect(() => { refresh(); }, [refresh, tick]);
+
+  const run = useCallback(async (op) => {
+    if (isOffline()) { onError(OFFLINE_MSG); return { message: OFFLINE_MSG }; }
+    let error;
+    try { error = await op(); } catch (e) { error = e; }
+    if (error) { onError(errMsg(error)); return { message: errMsg(error) }; }
+    await refresh();
+    return null;
+  }, [refresh, onError]);
+
+  return {
+    items, refresh,
+    add: (rec) => run(() => store.insert(table, [toDb(rec)])),
+    save: (id, rec) => run(() => store.update(table, id, toDb(rec))),
+    remove: (id) => run(() => store.remove(table, id)),
+  };
+}
+
+/** Returns [items, add, remove, replaceAll] for one managed list stored in `config`. */
+function useConfigList(key, onError, onLoadError, tick) {
+  const [items, setItems] = useState([]);
+  const ref = useRef(items);
+  ref.current = items;
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      let res;
+      try { res = await store.getConfig(key); } catch (e) { res = { items: null, error: e }; }
+      if (!alive) return;
+      // Only seed the defaults when the read SUCCEEDED and found nothing; a failed read must not overwrite real data.
+      if (res.error) { onLoadError(key, `Couldn't load your ${key.replace('_', ' ')} list: ${errMsg(res.error)}`); return; }
+      if (res.items) { onLoadError(key, ''); setItems(res.items); return; }
+      const seed = DEFAULTS[key] || [];
+      let err; try { err = await store.setConfig(key, seed); } catch (e) { err = e; }
+      if (!alive) return;
+      if (err) { onLoadError(key, `Couldn't set up the ${key.replace('_', ' ')} list: ${errMsg(err)}`); return; }
+      onLoadError(key, ''); setItems(seed);
+    })();
+    return () => { alive = false; };
+  }, [key, tick]);
+  // Resolves to an error object on failure, null on success; the list on screen changes only after the write is confirmed.
+  const write = async (next) => {
+    if (isOffline()) { onError(OFFLINE_MSG); return { message: OFFLINE_MSG }; }
+    let err; try { err = await store.setConfig(key, next); } catch (e) { err = e; }
+    if (err) { onError(errMsg(err)); return { message: errMsg(err) }; }
+    setItems(next);
+    return null;
+  };
+  return [items, (name) => write([...ref.current, name]), (name) => write(ref.current.filter((i) => i !== name)), write];
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ---------- icons ---------- */
+
+function mkIcon(children) {
+  return function IconCmp({ size = 16, className, style }) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+           strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>{children}</svg>
+    );
+  };
+}
+const Icon = {
+  Plus: mkIcon(<path d="M12 5v14M5 12h14" />),
+  X: mkIcon(<path d="M18 6L6 18M6 6l12 12" />),
+  Check: mkIcon(<path d="M20 6L9 17l-5-5" />),
+  Trash: mkIcon(<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />),
+  Pencil: mkIcon(<path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />),
+  Download: mkIcon(<path d="M12 3v12M7 10l5 5 5-5M4 21h16" />),
+  Upload: mkIcon(<path d="M12 15V3M7 8l5-5 5 5M4 21h16" />),
+  Loader: mkIcon(<path d="M12 3a9 9 0 1 0 9 9" />),
+  Refresh: mkIcon(<path d="M21 12a9 9 0 10-3.2 6.9M21 12v-5M21 12h-5" />),
+  Dashboard: mkIcon(<><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></>),
+  Bed: mkIcon(<path d="M3 18V6M3 14h18v4M21 14v-3a3 3 0 00-3-3h-7v6" />),
+  Receipt: mkIcon(<><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6" /></>),
+  Table: mkIcon(<><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 10h18M9 4v16" /></>),
+  Gear: mkIcon(<><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" /></>),
+};
+
+/* ---------- small building blocks ---------- */
+
+const inputStyle = { border: `1px solid ${C.line}`, borderRadius: 6, padding: '8px 10px', fontSize: 14, color: C.ink, background: C.panel, width: '100%' };
+
+function Field({ label, children, hint }) {
+  return (
+    <label className="col g1 grow">
+      <span className="small soft">{label}</span>
+      {children}
+      {hint ? <span className="xs soft">{hint}</span> : null}
+    </label>
+  );
+}
+const TextInput = (props) => <input {...props} style={{ ...inputStyle, ...(props.style || {}) }} />;
+const Select = (props) => <select {...props} style={{ ...inputStyle, ...(props.style || {}) }} />;
+function MoneyInput({ value, onChange }) {
+  return (
+    <div className="row" style={{ border: `1px solid ${C.line}`, borderRadius: 6, padding: '0 10px', background: C.panel }}>
+      <span className="soft" style={{ fontSize: 14 }}>$</span>
+      <input type="number" min="0" step="1" value={value} onChange={onChange} placeholder="0"
+             style={{ border: 'none', outline: 'none', flex: 1, padding: '8px 6px', fontSize: 14, background: 'transparent', color: C.ink, width: '100%' }} />
+    </div>
+  );
+}
+function KpiCard({ label, value, sub, accent }) {
+  return (
+    <div className="card grow" style={{ borderLeft: `3px solid ${accent}`, minWidth: 160, padding: 14 }}>
+      <div className="xs soft">{label}</div>
+      <div className="serif" style={{ fontSize: 24, marginTop: 4 }}>{value}</div>
+      {sub ? <div className="xs soft" style={{ marginTop: 4 }}>{sub}</div> : null}
+    </div>
+  );
+}
+const EmptyState = ({ text }) => <div className="row small soft" style={{ justifyContent: 'center', padding: '48px 0' }}>{text}</div>;
+function Btn({ kind = 'primary', accent = C.forest, ...props }) {
+  const style = kind === 'primary' ? { background: accent, color: '#fff' } : { background: 'transparent', color: C.inkSoft, borderColor: C.line };
+  return <button className="btn" {...props} style={{ ...style, ...(props.style || {}) }} />;
+}
+function SectionTitle({ children, right }) {
+  return <div className="row between wrap g3" style={{ marginBottom: 12 }}><h2 className="serif" style={{ margin: 0, fontSize: 18, fontWeight: 400 }}>{children}</h2>{right}</div>;
+}
+
+function DateRangeFilter({ from, to, onFromChange, onToChange, presets }) {
+  return (
+    <div className="row g3 wrap">
+      <div className="row g2 small soft">
+        <span>From</span>
+        <TextInput type="date" value={from} max={to || undefined} onChange={(e) => onFromChange(e.target.value)} style={{ width: 'auto' }} />
+        <span>To</span>
+        <TextInput type="date" value={to} min={from || undefined} onChange={(e) => onToChange(e.target.value)} style={{ width: 'auto' }} />
+      </div>
+      {presets}
+      {from || to ? <button type="button" className="btn-link" onClick={() => { onFromChange(''); onToChange(''); }}>Clear dates</button> : null}
+    </div>
+  );
+}
+
+function ChartCanvas({ type, labels, datasets, money, percent }) {
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    if (chartRef.current) chartRef.current.destroy();
+    const inkSoft = cssVar('--ink-soft', '#666'), line = cssVar('--line', '#ddd');
+    chartRef.current = new Chart(canvasRef.current, {
+      type,
+      data: {
+        labels,
+        datasets: datasets.map((d) => ({
+          label: d.label, data: d.values, borderColor: resolveColor(d.color),
+          backgroundColor: type === 'line' ? 'transparent' : resolveColor(d.color),
+          borderWidth: type === 'line' ? 2 : 0, borderRadius: type === 'bar' ? 3 : 0, tension: 0.3, pointRadius: 0, maxBarThickness: 28,
+        })),
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: datasets.length > 1, labels: { color: inkSoft, boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label ? ctx.dataset.label + ': ' : ''}${money ? fmtMoney(ctx.parsed.y) : percent ? ctx.parsed.y + '%' : ctx.parsed.y}` } },
+        },
+        scales: {
+          x: { ticks: { color: inkSoft, font: { size: 11 } }, grid: { display: false } },
+          y: { beginAtZero: true, max: percent ? 100 : undefined, ticks: { color: inkSoft, font: { size: 11 }, callback: money ? (v) => fmtMoney(v) : percent ? (v) => v + '%' : undefined }, grid: { color: line } },
+        },
+      },
+    });
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+    // eslint-disable-next-line
+  }, [type, JSON.stringify(labels), JSON.stringify(datasets), money, percent]);
+  return <div style={{ height: 220 }}><canvas ref={canvasRef}></canvas></div>;
+}
+
+/** A small editable list of names. With a `title` it is a card of its own; without one it sits inside a form. */
+function ListManager({ title, items, onAdd, onRemove, placeholder, hint, renderExtra }) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  async function submit() {
+    const t = name.trim();
+    if (!t) { setError('Enter a name.'); return; }
+    if (items.some((i) => i.toLowerCase() === t.toLowerCase())) { setError('Already on the list.'); return; }
+    const err = await onAdd(t);
+    if (err) { setError(err.message); return; } // keep what was typed so it can be retried
+    setError(''); setName('');
+  }
+  return (
+    <div className={title ? 'card col g3' : 'col g3'} style={title ? undefined : { border: `1px solid ${C.line}`, borderRadius: 6, padding: 12 }}>
+      {title ? <div><div style={{ fontSize: 15 }}>{title}</div>{hint ? <div className="xs soft">{hint}</div> : null}</div> : null}
+      {items.length === 0 ? <div className="xs soft">Nothing here yet.</div> : (
+        <div className="row wrap g2">
+          {items.map((p) => (
+            <span key={p} className="row g1 xs" style={{ background: C.forestSoft, color: C.forest, borderRadius: 999, padding: '4px 8px' }}>
+              {p}
+              <button type="button" onClick={() => onRemove(p)} aria-label={`Remove ${p}`} className="icon-btn" style={{ color: C.forest }}><Icon.X size={12} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="row g2">
+        <TextInput type="text" placeholder={placeholder} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }} />
+        <Btn type="button" onClick={submit} accent={C.ink} style={{ color: C.paper }}>Add</Btn>
+      </div>
+      {error ? <div className="xs" style={{ color: C.clay }}>{error}</div> : null}
+    </div>
+  );
+}
+
+/** Dropdown with a "Manage list" toggle, like the one in the farm app. */
+function ManagedSelect({ label, value, onChange, items, onAddItem, onRemoveItem, placeholder }) {
+  const [managing, setManaging] = useState(false);
+  return (
+    <div className="col g1">
+      <div className="row between">
+        <span className="small soft">{label}</span>
+        <button type="button" className="btn-link" onClick={() => setManaging((v) => !v)}>{managing ? 'Done' : 'Manage list'}</button>
+      </div>
+      {managing
+        ? <ListManager items={items} onAdd={onAddItem} onRemove={onRemoveItem} placeholder={placeholder} />
+        : <Select value={value} onChange={onChange}><option value="">{items.length ? `Select ${label.toLowerCase()}` : 'Nothing yet — use Manage list to add one'}</option>{items.map((i) => <option key={i}>{i}</option>)}</Select>}
+    </div>
+  );
+}
+
+function RowActions({ onEdit, onDelete }) {
+  return (
+    <div className="row g2" style={{ justifyContent: 'flex-end' }}>
+      <button className="icon-btn" onClick={onEdit} aria-label="Edit"><Icon.Pencil size={14} /></button>
+      <button className="icon-btn" onClick={onDelete} aria-label="Delete"><Icon.Trash size={14} /></button>
+    </div>
+  );
+}
+
+/* ---------- booking form (used for new entries on the Bookings tab and for edits on the Records tab) ---------- */
+
+function BookingForm({ editing, bookings, cabins, channels, onAdd, onSave, onDone, onCancel }) {
+  const today = todayISO();
+  const [f, setF] = useState(() => editing ? {
+    guest: editing.guest, phone: editing.phone, cabin: editing.cabin, guests: String(editing.guests), checkIn: editing.checkIn, checkOut: editing.checkOut,
+    total: String(editing.total), channel: editing.channel, paymentMethod: editing.paymentMethod, notes: editing.notes,
+  } : {
+    guest: '', phone: '', cabin: cabins.length === 1 ? cabins[0] : '', guests: '2', checkIn: today, checkOut: addDays(today, 2),
+    total: '', channel: channels[0] || '', paymentMethod: '', notes: '',
+  });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const set = (patch) => setF((p) => ({ ...p, ...patch }));
+
+  // The cabin list loads after the form first renders; with a single cabin, select it automatically.
+  useEffect(() => { if (!f.cabin && cabins.length === 1) set({ cabin: cabins[0] }); }, [cabins.length]);
+
+  const nights = f.checkIn && f.checkOut ? nightsBetween(f.checkIn, f.checkOut) : 0;
+  const total = Number(f.total) || 0;
+  const isWhole = (v, min) => v === '' || (Number.isInteger(Number(v)) && Number(v) >= min);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!f.guest.trim() || !f.cabin || !f.checkIn || !f.checkOut) { setError('Fill in guest name, cabin and both dates.'); return; }
+    if (nights < 1) { setError('Check-out must be at least one day after check-in.'); return; }
+    if (!f.guests || !isWhole(f.guests, 1)) { setError('Number of guests must be a whole number, 1 or more.'); return; }
+    if (f.total === '' || !isWhole(f.total, 0)) { setError('Enter the total as a whole number (0 or more).'); return; }
+    const rec = {
+      guest: f.guest.trim(), phone: f.phone.trim(), cabin: f.cabin, guests: Number(f.guests), checkIn: f.checkIn, checkOut: f.checkOut,
+      total: Number(f.total), channel: f.channel, paymentMethod: f.paymentMethod, notes: f.notes.trim(),
+    };
+    const clash = findConflict(bookings, rec, editing ? editing.id : null);
+    if (clash) { setError(`${rec.cabin} is already booked ${fmtShort(clash.checkIn)} → ${fmtShort(clash.checkOut)} (${clash.guest}). Pick other dates or another cabin.`); return; }
+    setError(''); setSaving(true);
+    try {
+      const err = editing ? await onSave(editing.id, rec) : await onAdd(rec);
+      if (err) setError(err.message); // form stays open with everything still filled in
+      else onDone();
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <form onSubmit={submit} className="card col g4" style={{ maxWidth: 720 }}>
+      <SectionTitle>{editing ? `Edit booking — ${editing.guest}` : 'New booking'}</SectionTitle>
+      <div className="row g4 stack-sm">
+        <Field label="Guest name"><TextInput type="text" value={f.guest} onChange={(e) => set({ guest: e.target.value })} /></Field>
+        <Field label="Phone / contact" hint="Optional"><TextInput type="text" value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
+      </div>
+      <div className="row g4 stack-sm">
+        <Field label="Cabin">
+          <Select value={f.cabin} onChange={(e) => set({ cabin: e.target.value })}>
+            <option value="">{cabins.length ? 'Select cabin' : 'Add a cabin in Settings first'}</option>
+            {cabins.map((c) => <option key={c} value={c}>{c}</option>)}
+          </Select>
+        </Field>
+        <Field label="Guests"><TextInput type="number" min="1" step="1" value={f.guests} onChange={(e) => set({ guests: e.target.value })} /></Field>
+        <Field label="Channel">
+          <Select value={f.channel} onChange={(e) => set({ channel: e.target.value })}>
+            <option value="">—</option>
+            {channels.map((c) => <option key={c} value={c}>{c}</option>)}
+          </Select>
+        </Field>
+      </div>
+      <div className="row g4 stack-sm">
+        <Field label="Check-in"><TextInput type="date" value={f.checkIn} onChange={(e) => {
+          const checkIn = e.target.value;
+          set({ checkIn, ...(checkIn && f.checkOut <= checkIn ? { checkOut: addDays(checkIn, 1) } : {}) });
+        }} /></Field>
+        <Field label="Check-out"><TextInput type="date" value={f.checkOut} min={f.checkIn ? addDays(f.checkIn, 1) : undefined} onChange={(e) => set({ checkOut: e.target.value })} /></Field>
+      </div>
+      <div className="row g4 stack-sm">
+        <Field label="Total"><MoneyInput value={f.total} onChange={(e) => set({ total: e.target.value })} /></Field>
+        <Field label="Payment method">
+          <Select value={f.paymentMethod} onChange={(e) => set({ paymentMethod: e.target.value })}>
+            <option value="">—</option>
+            {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+          </Select>
+        </Field>
+      </div>
+      <Field label="Notes" hint="Optional — arrival time, pets, allergies, special requests">
+        <textarea value={f.notes} onChange={(e) => set({ notes: e.target.value })} style={{ ...inputStyle, minHeight: 64, resize: 'vertical' }} />
+      </Field>
+      <div className="small soft">
+        {nights > 0 ? <>{nights} night{nights > 1 ? 's' : ''}{total ? <> · about <span className="tabular" style={{ color: C.ink }}>{fmtMoney(Math.round(total / nights))}</span> per night</> : null}</> : 'Pick valid dates to see the number of nights.'}
+      </div>
+      {error ? <div className="small" style={{ color: C.clay }}>{error}</div> : null}
+      <div className="row g2" style={{ justifyContent: 'flex-end' }}>
+        {onCancel ? <Btn type="button" kind="ghost" onClick={onCancel}>Cancel</Btn> : null}
+        <Btn type="submit" disabled={saving}>{saving ? <Icon.Loader size={14} className="spin" /> : editing ? <Icon.Check size={14} /> : <Icon.Plus size={14} />}{editing ? 'Save changes' : 'Add booking'}</Btn>
+      </div>
+    </form>
+  );
+}
+
+/* ---------- expense form (Expenses tab for new entries, Records tab for edits) ---------- */
+
+function ExpenseForm({ editing, categories, onAddCategory, onRemoveCategory, onAdd, onSave, onDone, onCancel }) {
+  const [date, setDate] = useState(editing ? editing.date : todayISO());
+  const [category, setCategory] = useState(editing ? editing.category : '');
+  const [description, setDescription] = useState(editing ? editing.description : '');
+  const [amount, setAmount] = useState(editing ? String(editing.amount) : '');
+  const [spread, setSpread] = useState(!!(editing && editing.accrualMonths > 1));
+  const [months, setMonths] = useState(editing && editing.accrualMonths > 1 ? String(editing.accrualMonths) : '');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!date || !category || !description.trim() || !amount) { setError('Fill in date, category, description and amount.'); return; }
+    if (!Number.isInteger(Number(amount)) || Number(amount) <= 0) { setError('Amount must be a whole number greater than zero.'); return; }
+    if (spread && (!Number.isInteger(Number(months)) || Number(months) < 2)) { setError('Enter 2 or more months to spread this expense over.'); return; }
+    setError(''); setSaving(true);
+    const rec = { date, category, description: description.trim(), amount: Number(amount), ...(spread ? { accrualMonths: Number(months) } : {}) };
+    try {
+      const err = editing ? await onSave(editing.id, rec) : await onAdd(rec);
+      if (err) setError(err.message);
+      else onDone();
+    } finally { setSaving(false); }
+  }
+  return (
+    <form onSubmit={submit} className="card col g4" style={{ maxWidth: 520 }}>
+      <SectionTitle>{editing ? 'Edit expense' : 'New expense'}</SectionTitle>
+      <Field label="Date"><TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+      <ManagedSelect label="Category" value={category} onChange={(e) => setCategory(e.target.value)} items={categories}
+        onAddItem={onAddCategory} onRemoveItem={onRemoveCategory} placeholder="New category name" />
+      <Field label="Description"><TextInput type="text" placeholder="e.g. Firewood delivery, 2 cords" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
+      <Field label="Amount"><MoneyInput value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+      <div className="col g2" style={{ border: `1px solid ${C.line}`, borderRadius: 6, padding: 12 }}>
+        <label className="row g2 small" style={{ cursor: 'pointer' }}>
+          <input type="checkbox" checked={spread} onChange={(e) => setSpread(e.target.checked)} />
+          Spread over several months (insurance, roof repair, appliance…)
+        </label>
+        {spread ? <Field label="Number of months" hint={Number(months) >= 2 && Number(amount) > 0 ? `≈ ${fmtMoney(Math.floor(Number(amount) / Number(months)))} per month starting ${fmtDate(date)}` : undefined}>
+          <TextInput type="number" min="2" step="1" placeholder="e.g. 12" value={months} onChange={(e) => setMonths(e.target.value)} />
+        </Field> : null}
+      </div>
+      {error ? <div className="small" style={{ color: C.clay }}>{error}</div> : null}
+      <div className="row g2" style={{ justifyContent: 'flex-end' }}>
+        {onCancel ? <Btn type="button" kind="ghost" onClick={onCancel}>Cancel</Btn> : null}
+        <Btn type="submit" disabled={saving} accent={C.clay}>{saving ? <Icon.Loader size={14} className="spin" /> : editing ? <Icon.Check size={14} /> : <Icon.Plus size={14} />}{editing ? 'Save changes' : 'Add expense'}</Btn>
+      </div>
+    </form>
+  );
+}
+
+/* ---------- entry tabs: just the form ---------- */
+
+function BookingsTab({ bookings, cabins, channels, onAdd, notify }) {
+  const [n, setN] = useState(0); // bumping the key gives a fresh blank form after each save
+  return <BookingForm key={n} bookings={bookings} cabins={cabins} channels={channels} onAdd={onAdd}
+    onDone={() => { setN((v) => v + 1); notify('Booking added'); window.scrollTo({ top: 0 }); }} />;
+}
+
+function ExpensesTab({ categories, onAddCategory, onRemoveCategory, onAdd, notify }) {
+  const [n, setN] = useState(0);
+  return <ExpenseForm key={n} categories={categories} onAddCategory={onAddCategory} onRemoveCategory={onRemoveCategory} onAdd={onAdd}
+    onDone={() => { setN((v) => v + 1); notify('Expense added'); window.scrollTo({ top: 0 }); }} />;
+}
+
+/* ---------- records tab: look back at, filter, edit and delete saved entries ---------- */
+
+function RecordsTab({ bookings, expenses, cabins, channels, categories, onAddCategory, onRemoveCategory,
+  onSaveBooking, onSaveExpense, onRemoveBooking, onRemoveExpense, onExport, notify }) {
+  const [type, setType] = useState('bookings');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [cabin, setCabin] = useState('');
+  const [category, setCategory] = useState('');
+  const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState(null); // { type, rec }
+  const q = search.toLowerCase();
+
+  const bookingRows = useMemo(() => bookings.filter((b) => (!from || b.checkIn >= from) && (!to || b.checkIn <= to) && (!cabin || b.cabin === cabin)
+    && (!q || `${b.guest} ${b.phone} ${b.notes} ${b.channel}`.toLowerCase().includes(q))).sort((a, b) => b.checkIn.localeCompare(a.checkIn)), [bookings, from, to, cabin, q]);
+  const expenseRows = useMemo(() => expenses.filter((e) => (!from || e.date >= from) && (!to || e.date <= to) && (!category || e.category === category)
+    && (!q || `${e.category} ${e.description}`.toLowerCase().includes(q))).sort((a, b) => b.date.localeCompare(a.date)), [expenses, from, to, category, q]);
+
+  function startEdit(t, rec) { setEditing({ t, rec }); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  const closeEdit = () => setEditing(null);
+  const done = () => { closeEdit(); notify('Changes saved'); };
+
+  if (editing && editing.t === 'bookings') {
+    return <BookingForm key={editing.rec.id} editing={editing.rec} bookings={bookings} cabins={cabins} channels={channels}
+      onSave={onSaveBooking} onDone={done} onCancel={closeEdit} />;
+  }
+  if (editing && editing.t === 'expenses') {
+    return <ExpenseForm key={editing.rec.id} editing={editing.rec} categories={categories} onAddCategory={onAddCategory} onRemoveCategory={onRemoveCategory}
+      onSave={onSaveExpense} onDone={done} onCancel={closeEdit} />;
+  }
+
+  const bookingTotals = bookingRows.reduce((s, b) => s + b.total, 0);
+  const expenseTotal = expenseRows.reduce((s, e) => s + e.amount, 0);
+  const filtered = !!(from || to || cabin || category || search);
+
+  return (
+    <div className="col g4">
+      <div className="row g3 wrap">
+        <div className="row" style={{ border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden' }}>
+          {[['bookings', 'Bookings'], ['expenses', 'Expenses']].map(([id, label]) => (
+            <button key={id} onClick={() => setType(id)} className="small" style={{ padding: '7px 14px', border: 'none', cursor: 'pointer', background: type === id ? C.forest : C.panel, color: type === id ? '#fff' : C.inkSoft }}>{label}</button>
+          ))}
+        </div>
+        {type === 'bookings' && cabins.length > 1 ? <Select value={cabin} onChange={(e) => setCabin(e.target.value)} style={{ width: 'auto' }}><option value="">All cabins</option>{cabins.map((c) => <option key={c}>{c}</option>)}</Select> : null}
+        {type === 'expenses' ? <Select value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: 'auto' }}><option value="">All categories</option>{categories.map((c) => <option key={c}>{c}</option>)}</Select> : null}
+        <TextInput type="search" placeholder={type === 'bookings' ? 'Search guest, phone, notes…' : 'Search description…'} value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 240 }} />
+      </div>
+      <div className="row between wrap g3">
+        <DateRangeFilter from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
+        <span className="small soft">
+          {type === 'bookings' ? `${bookingRows.length} booking${bookingRows.length === 1 ? '' : 's'} · ${fmtMoney(bookingTotals)}` : `${expenseRows.length} expense${expenseRows.length === 1 ? '' : 's'} · ${fmtMoney(expenseTotal)}`}
+        </span>
+      </div>
+      <div className="xs soft" style={{ marginTop: -8 }}>{type === 'bookings' ? 'Dates filter by check-in day.' : 'Dates filter by the day the expense was paid.'}</div>
+
+      {type === 'bookings' ? (
+        bookingRows.length === 0 ? <EmptyState text={filtered ? 'No bookings match these filters.' : 'No bookings yet.'} /> : (
+          <div className="card scroll-x" style={{ padding: '4px 16px' }}>
+            <table>
+              <thead><tr><th>Guest</th><th>Cabin</th><th>Stay</th><th className="num">Total</th><th>Channel</th><th></th></tr></thead>
+              <tbody>
+                {bookingRows.map((b) => {
+                  return (
+                    <tr key={b.id}>
+                      <td><div>{b.guest}</div><div className="xs soft">{b.guests} guest{b.guests > 1 ? 's' : ''}{b.phone ? ` · ${b.phone}` : ''}</div>{b.notes ? <div className="xs soft" style={{ maxWidth: 240, whiteSpace: 'pre-wrap' }}>{b.notes}</div> : null}</td>
+                      <td>{b.cabin}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{fmtShort(b.checkIn)} → {fmtShort(b.checkOut)}, {b.checkOut.slice(0, 4)}<div className="xs soft">{bookingNights(b)} night{bookingNights(b) > 1 ? 's' : ''} · about {fmtMoney(bookingAvgNight(b))}/night</div></td>
+                      <td className="num tabular">{fmtMoney(b.total)}</td>
+                      <td>{b.channel || <span className="soft">—</span>}</td>
+                      <td><RowActions onEdit={() => startEdit('bookings', b)} onDelete={() => { if (window.confirm(`Delete the booking for ${b.guest}? This can't be undone.`)) onRemoveBooking(b.id); }} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : (
+        expenseRows.length === 0 ? <EmptyState text={filtered ? 'No expenses match these filters.' : 'No expenses yet.'} /> : (
+          <div className="card scroll-x" style={{ padding: '4px 16px' }}>
+            <table>
+              <thead><tr><th>Date</th><th>Category</th><th>Description</th><th className="num">Amount</th><th></th></tr></thead>
+              <tbody>
+                {expenseRows.map((e) => (
+                  <tr key={e.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(e.date)}</td>
+                    <td>{e.category}</td>
+                    <td>{e.description}{e.accrualMonths > 1 ? <div className="xs soft">spread over {e.accrualMonths} months</div> : null}</td>
+                    <td className="num tabular">{fmtMoney(e.amount)}</td>
+                    <td><RowActions onEdit={() => startEdit('expenses', e)} onDelete={() => { if (window.confirm('Delete this expense?')) onRemoveExpense(e.id); }} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
+      <div><Btn kind="ghost" onClick={onExport}><Icon.Download size={14} /> Export everything to Excel</Btn></div>
+    </div>
+  );
+}
+
+/* ---------- dashboard tab ---------- */
+
+function DashboardTab({ bookings, expenses, cabins }) {
+  const today = todayISO();
+  const thisYear = today.slice(0, 4);
+  const [from, setFrom] = useState(`${thisYear}-01-01`);
+  const [to, setTo] = useState(`${thisYear}-12-31`);
+  const y = useMemo(() => computeRange(bookings, expenses, from, to, cabins.length, today), [bookings, expenses, from, to, cabins.length, today]);
+
+  const presets = (
+    <div className="row g3">
+      <button type="button" className="btn-link" onClick={() => { setFrom(`${thisYear}-01-01`); setTo(`${thisYear}-12-31`); }}>This year</button>
+      <button type="button" className="btn-link" onClick={() => { setFrom(addDays(today, -364)); setTo(today); }}>Last 12 months</button>
+    </div>
+  );
+
+  return (
+    <div className="col g6">
+      <div className="col g1">
+        <DateRangeFilter from={from} to={to} onFromChange={setFrom} onToChange={setTo} presets={presets} />
+        {!from && !to ? <div className="xs soft">Showing everything on record.</div> : null}
+      </div>
+      {!y ? <EmptyState text="The “From” date has to be on or before the “To” date." /> : <>
+        <div className="row g3 wrap">
+          <KpiCard label="Revenue" value={fmtMoney(y.revenue)} sub="Booked nights in this period" accent={C.forest} />
+          <KpiCard label="Expenses" value={fmtMoney(y.expenses)} sub="Spread costs counted monthly" accent={C.clay} />
+          <KpiCard label="Net" value={fmtMoney(y.revenue - y.expenses)} sub="Revenue − expenses" accent={y.revenue - y.expenses >= 0 ? C.forest : C.clay} />
+          <KpiCard label="Occupancy" value={y.occupancy === null ? '—' : `${y.occupancy}%`} sub={`${y.nightsToDate} night${y.nightsToDate === 1 ? '' : 's'} sold up to today`} accent={C.timber} />
+          <KpiCard label="Avg. nightly rate" value={y.adr === null ? '—' : fmtMoney(y.adr)} sub="Per night sold" accent={C.timber} />
+        </div>
+        <div className="row g4 wrap" style={{ alignItems: 'stretch' }}>
+          <div className="card grow" style={{ minWidth: 300 }}>
+            <SectionTitle>Revenue vs expenses</SectionTitle>
+            <ChartCanvas type="bar" money labels={y.labels} datasets={[{ label: 'Revenue', values: y.rev, color: C.forest }, { label: 'Expenses', values: y.exp, color: C.clay }]} />
+          </div>
+          <div className="card grow" style={{ minWidth: 300 }}>
+            <SectionTitle>Occupancy by month</SectionTitle>
+            <ChartCanvas type="line" percent labels={y.labels} datasets={[{ label: 'Occupancy', values: y.monthOccupancy, color: C.timber }]} />
+            <div className="xs soft" style={{ marginTop: 6 }}>Includes bookings still to come. {cabins.length > 1 ? `Across ${cabins.length} cabins.` : ''}</div>
+          </div>
+        </div>
+        <div className="card">
+          <SectionTitle>Bookings by channel</SectionTitle>
+          {y.byChannel.length === 0 ? <div className="small soft">No bookings in this period.</div> : (
+            <ChartCanvas type="bar" money labels={y.byChannel.map(([name]) => name)} datasets={[{ label: 'Booking totals', values: y.byChannel.map(([, v]) => v), color: C.timber }]} />
+          )}
+        </div>
+      </>}
+    </div>
+  );
+}
+
+/* ---------- settings tab ---------- */
+
+function SettingsTab({ cabins, channels, onExport, onBackup, onRestore }) {
+  const fileRef = useRef(null);
+  return (
+    <div className="col g4" style={{ maxWidth: 720 }}>
+      <ListManager title="Cabins" hint="Used in the booking form and to work out occupancy." items={cabins[0]} onAdd={cabins[1]} onRemove={cabins[2]} placeholder="e.g. Pine Cabin" />
+      <ListManager title="Booking channels" hint="Where reservations come from." items={channels[0]} onAdd={channels[1]} onRemove={channels[2]} placeholder="e.g. Facebook" />
+      <div className="card col g3">
+        <div style={{ fontSize: 15 }}>Data</div>
+        <div className="small soft">
+          {sb ? 'Connected to your Supabase project — data is shared across all devices.'
+            : 'Local mode: everything is saved in this browser on this computer only. Download a backup regularly, and use a Supabase project (see CABIN_NOTES.md) to share data between devices.'}
+        </div>
+        <div className="row g2 wrap">
+          <Btn kind="ghost" onClick={onExport}><Icon.Download size={14} /> Export to Excel</Btn>
+          {!sb ? <>
+            <Btn kind="ghost" onClick={onBackup}><Icon.Download size={14} /> Download backup (.json)</Btn>
+            <Btn kind="ghost" onClick={() => fileRef.current && fileRef.current.click()}><Icon.Upload size={14} /> Restore backup</Btn>
+            <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) onRestore(f); }} />
+          </> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- login (Supabase mode only) ---------- */
+
+function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit(e) {
+    e.preventDefault(); setBusy(true); setError('');
+    const { error: err } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+    if (err) setError(err.message);
+    setBusy(false);
+  }
+  return (
+    <div className="row" style={{ minHeight: '100vh', justifyContent: 'center', padding: 16 }}>
+      <form onSubmit={submit} className="card col g4" style={{ width: '100%', maxWidth: 360 }}>
+        <h1 className="serif" style={{ margin: 0, fontSize: 24, fontWeight: 400 }}>{APP_NAME}</h1>
+        <Field label="Email"><TextInput type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+        <Field label="Password"><TextInput type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+        {error ? <div className="small" style={{ color: C.clay }}>{error}</div> : null}
+        <Btn type="submit" disabled={busy}>{busy ? <Icon.Loader size={14} className="spin" /> : null}Sign in</Btn>
+      </form>
+    </div>
+  );
+}
+
+/* ---------- app shell ---------- */
+
+function Main({ session }) {
+  const [tab, setTab] = useState('dashboard');
+  const [toast, setToast] = useState('');
+  const toastTimer = useRef(null);
+  const notify = useCallback((text) => { setToast(text); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 4000); }, []);
+
+  // Connectivity + load-failure state. `tick` re-runs every load (Retry button, or the browser coming back online).
+  const [online, setOnline] = useState(navigator.onLine);
+  const [tick, setTick] = useState(0);
+  const [loadErrors, setLoadErrors] = useState({});
+  const reportLoad = useCallback((key, msg) => setLoadErrors((p) => ((p[key] || '') === msg ? p : { ...p, [key]: msg })), []);
+  useEffect(() => {
+    const on = () => { setOnline(true); setTick((t) => t + 1); };
+    const off = () => setOnline(false);
+    window.addEventListener('online', on); window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+  const loadProblem = Object.values(loadErrors).find(Boolean);
+
+  const bookings = useTable('bookings', bookingFromDb, bookingToDb, 'check_in', notify, reportLoad, tick);
+  const expenses = useTable('expenses', expenseFromDb, expenseToDb, 'date', notify, reportLoad, tick);
+  const cabins = useConfigList('cabins', notify, reportLoad, tick);
+  const channels = useConfigList('channels', notify, reportLoad, tick);
+  const categories = useConfigList('categories', notify, reportLoad, tick);
+  const refreshAll = () => setTick((t) => t + 1);
+  const goTab = (id) => { setTab(id); window.scrollTo({ top: 0 }); };
+
+  function exportExcel() {
+    const wb = XLSX.utils.book_new();
+    const add = (name, rows) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{}]), name);
+    add('Bookings', bookings.items.map((b) => ({ Guest: b.guest, Phone: b.phone, Cabin: b.cabin, 'Check-in': b.checkIn, 'Check-out': b.checkOut, Nights: bookingNights(b), Guests: b.guests, Total: b.total, Channel: b.channel, 'Payment method': b.paymentMethod, Notes: b.notes })));
+    add('Expenses', expenses.items.map((e) => ({ Date: e.date, Category: e.category, Description: e.description, Amount: e.amount, 'Spread over months': e.accrualMonths || '' })));
+    add('Expenses (monthly)', expenses.items.flatMap((e) => explodeExpense(e).map((s) => ({ Month: s.month, Date: s.date, Category: e.category, Description: e.description, Amount: s.amount }))));
+    XLSX.writeFile(wb, `cabin-ledger-${todayISO()}.xlsx`);
+  }
+  function downloadBackup() {
+    const dump = {}; LOCAL_KEYS.forEach((k) => { dump[k] = lsRead(k, k === 'config' ? {} : []); });
+    triggerDownload(new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' }), `cabin-ledger-backup-${todayISO()}.json`);
+  }
+  async function restoreBackup(file) {
+    try {
+      const dump = JSON.parse(await file.text());
+      if (!LOCAL_KEYS.some((k) => k in dump)) throw new Error('not a backup');
+      if (!window.confirm('Restoring replaces everything currently saved in this browser. Continue?')) return;
+      LOCAL_KEYS.forEach((k) => { if (k in dump) lsWrite(k, dump[k]); });
+      window.location.reload();
+    } catch (e) { notify("That file isn't a Cabin Ledger backup."); }
+  }
+
+  return (
+    <div className="app-main" style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px 64px' }}>
+      <header className="row between wrap g3" style={{ padding: '20px 0 12px' }}>
+        <div>
+          <h1 className="serif" style={{ margin: 0, fontSize: 26, fontWeight: 400 }}>{APP_NAME}</h1>
+          <div className="xs soft">{sb ? `Signed in as ${session.user.email}` : 'Local mode · data saved in this browser'}</div>
+        </div>
+        <div className="row g2">
+          <Btn kind="ghost" onClick={refreshAll}><Icon.Refresh size={14} /> Refresh</Btn>
+          {sb ? <Btn kind="ghost" onClick={() => sb.auth.signOut()}>Sign out</Btn> : null}
+        </div>
+      </header>
+      <nav className="tabs top-tabs" style={{ marginBottom: 20 }}>
+        {NAV.map((n) => { const I = Icon[n.icon]; return <button key={n.id} className={`tab${tab === n.id ? ' active' : ''}`} onClick={() => goTab(n.id)}><I size={15} />{n.label}</button>; })}
+      </nav>
+      {sb && !online ? <div className="banner" role="alert" style={{ background: C.timberSoft, color: C.timber }}>You're offline. Nothing can be saved until the connection is back.</div> : null}
+      {loadProblem ? (
+        <div className="banner" role="alert" style={{ background: C.claySoft, color: C.clay }}>
+          <span>{loadProblem} What you see may be incomplete — don't add entries until this clears.</span>
+          <button type="button" className="btn-link" style={{ color: C.clay, fontSize: 13, textDecoration: 'underline' }} onClick={refreshAll}>Retry</button>
+        </div>
+      ) : null}
+      {tab === 'dashboard' ? <DashboardTab bookings={bookings.items} expenses={expenses.items} cabins={cabins[0]} /> : null}
+      {tab === 'bookings' ? <BookingsTab bookings={bookings.items} cabins={cabins[0]} channels={channels[0]} onAdd={bookings.add} notify={notify} /> : null}
+      {tab === 'expenses' ? <ExpensesTab categories={categories[0]} onAddCategory={categories[1]} onRemoveCategory={categories[2]} onAdd={expenses.add} notify={notify} /> : null}
+      {tab === 'records' ? <RecordsTab bookings={bookings.items} expenses={expenses.items} cabins={cabins[0]} channels={channels[0]}
+        categories={categories[0]} onAddCategory={categories[1]} onRemoveCategory={categories[2]}
+        onSaveBooking={bookings.save} onSaveExpense={expenses.save} onRemoveBooking={bookings.remove} onRemoveExpense={expenses.remove} onExport={exportExcel} notify={notify} /> : null}
+      {tab === 'settings' ? <SettingsTab cabins={cabins} channels={channels} onExport={exportExcel} onBackup={downloadBackup} onRestore={restoreBackup} /> : null}
+      {toast ? <div className="toast" role="status" style={{ position: 'fixed', bottom: 20, right: 20, background: C.ink, color: C.paper, padding: '8px 14px', borderRadius: 6, fontSize: 13, maxWidth: 360 }}>{toast}</div> : null}
+      <nav className="bottom-nav" aria-label="Main">
+        {NAV.map((n) => { const I = Icon[n.icon]; return <button key={n.id} type="button" onClick={() => goTab(n.id)} style={{ color: tab === n.id ? C.forest : C.inkSoft }}><I size={20} />{n.label}</button>; })}
+      </nav>
+    </div>
+  );
+}
+
+function App() {
+  const [session, setSession] = useState(undefined); // undefined = still checking
+  useEffect(() => {
+    if (!sb) { setSession(null); return; }
+    sb.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data } = sb.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => data.subscription.unsubscribe();
+  }, []);
+  if (session === undefined) return <EmptyState text="Loading…" />;
+  if (sb && !session) return <Login />;
+  return <Main session={session} />;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+<script>
+  // Installable app: the service worker only caches the CDN libraries (see sw.js), never the page or your data.
+  // It needs https (or localhost); on a plain file:// open the registration is skipped silently.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+</script>
+</body>
+</html>
