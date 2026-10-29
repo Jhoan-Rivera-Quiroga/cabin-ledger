@@ -5,7 +5,7 @@
 <title>Cabin Ledger — Rural Cabin Manager</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <link rel="manifest" href="manifest.webmanifest" />
-<meta name="theme-color" content="#2F5233" />
+<meta name="theme-color" content="#705EFF" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Cabin Ledger" />
@@ -14,23 +14,23 @@
 <link rel="icon" type="image/png" href="icon-192.png" />
 <style>
   :root {
-    --paper: #F5F1E8;
+    --paper: #FFEAD3;
     --panel: #FFFFFF;
     --ink: #262420;
-    --ink-soft: #6F6A5F;
-    --forest: #2F5233;
-    --forest-soft: #E4EAE1;
-    --clay: #A6482E;
-    --clay-soft: #F3E1DA;
-    --timber: #8A5A2B;
-    --timber-soft: #F1E6D6;
-    --line: #DDD6C6;
+    --ink-soft: #6B6158;
+    --forest: #705EFF;
+    --forest-soft: #ECEAFF;
+    --clay: #C4453A;
+    --clay-soft: #FCDCD3;
+    --timber: #9FA0FF;
+    --timber-soft: #EFEFFF;
+    --line: #EDD3B8;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --paper: #1C1D19; --panel: #262822; --ink: #EDEAE0; --ink-soft: #A9A699;
-      --forest: #7FB88A; --forest-soft: #2A3B2C; --clay: #D98A6E; --clay-soft: #43302A;
-      --timber: #D1A263; --timber-soft: #3E3426; --line: #3B3D34;
+      --paper: #1B1A22; --panel: #25242E; --ink: #F3ECE4; --ink-soft: #ABA5B4;
+      --forest: #7D6DFF; --forest-soft: #2F2A52; --clay: #F08A7A; --clay-soft: #46282A;
+      --timber: #9FA0FF; --timber-soft: #2B2B45; --line: #3A3846;
     }
   }
   * { box-sizing: border-box; }
@@ -979,7 +979,7 @@ function Main({ session }) {
       <nav className="tabs top-tabs" style={{ marginBottom: 20 }}>
         {NAV.map((n) => { const I = Icon[n.icon]; return <button key={n.id} className={`tab${tab === n.id ? ' active' : ''}`} onClick={() => goTab(n.id)}><I size={15} />{n.label}</button>; })}
       </nav>
-      {sb && !online ? <div className="banner" role="alert" style={{ background: C.timberSoft, color: C.timber }}>You're offline. Nothing can be saved until the connection is back.</div> : null}
+      {sb && !online ? <div className="banner" role="alert" style={{ background: C.timberSoft, color: C.ink }}>You're offline. Nothing can be saved until the connection is back.</div> : null}
       {loadProblem ? (
         <div className="banner" role="alert" style={{ background: C.claySoft, color: C.clay }}>
           <span>{loadProblem} What you see may be incomplete — don't add entries until this clears.</span>
