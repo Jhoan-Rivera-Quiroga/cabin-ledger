@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="UTF-8" />
-<title>Cabin Ledger — Rural Cabin Manager</title>
+<title>Cabin Ledger — Gestión de cabaña rural</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <link rel="manifest" href="manifest.webmanifest" />
 <meta name="theme-color" content="#705EFF" />
@@ -111,19 +111,30 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const TIME_ZONE = 'America/Bogota';
 
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'Dashboard' },
-  { id: 'bookings', label: 'Bookings', icon: 'Bed' },
-  { id: 'expenses', label: 'Expenses', icon: 'Receipt' },
-  { id: 'records', label: 'Records', icon: 'Table' },
-  { id: 'settings', label: 'Settings', icon: 'Gear' },
+  { id: 'dashboard', label: 'Resumen', icon: 'Dashboard' },
+  { id: 'bookings', label: 'Reservas', icon: 'Bed' },
+  { id: 'expenses', label: 'Gastos', icon: 'Receipt' },
+  { id: 'records', label: 'Registros', icon: 'Table' },
+  { id: 'settings', label: 'Ajustes', icon: 'Gear' },
 ];
 
-const PAYMENT_METHODS = ['Cash', 'Bank transfer', 'Card', 'Mobile payment', 'Platform payout', 'Other'];
+// The app manages a single cabin; every new booking is saved under this name (the database column is kept).
+const CABIN = 'Cabaña';
+
+// Lists and entries saved before the app was in Spanish hold the English default names; they are read as the Spanish ones
+// (and saved that way the next time they are written). Names the owner typed in are left alone.
+const OLD_NAMES = {
+  'Cash': 'Efectivo', 'Bank transfer': 'Transferencia bancaria', 'Card': 'Tarjeta', 'Mobile payment': 'Nequi / Daviplata', 'Platform payout': 'Pago de la plataforma',
+  'Direct': 'Directo', 'Phone / WhatsApp': 'Teléfono / WhatsApp', 'Referral': 'Referido',
+  'Cleaning & laundry': 'Aseo y lavandería', 'Firewood & heating': 'Leña y calefacción', 'Utilities': 'Servicios públicos', 'Maintenance & repairs': 'Mantenimiento y reparaciones',
+  'Supplies & amenities': 'Insumos y amenidades', 'Insurance & taxes': 'Seguros e impuestos', 'Marketing': 'Publicidad', 'Other': 'Otro',
+};
+const es = (name) => OLD_NAMES[name] || name;
 
 const DEFAULTS = {
-  cabins: ['Cabin 1'],
-  channels: ['Direct', 'Airbnb', 'Booking.com', 'Phone / WhatsApp', 'Referral'],
-  categories: ['Cleaning & laundry', 'Firewood & heating', 'Utilities', 'Maintenance & repairs', 'Supplies & amenities', 'Insurance & taxes', 'Marketing', 'Other'],
+  payment_methods: ['Efectivo', 'Transferencia bancaria', 'Tarjeta', 'Nequi / Daviplata', 'Pago de la plataforma', 'Otro'],
+  channels: ['Directo', 'Airbnb', 'Booking.com', 'Teléfono / WhatsApp', 'Referido'],
+  categories: ['Aseo y lavandería', 'Leña y calefacción', 'Servicios públicos', 'Mantenimiento y reparaciones', 'Insumos y amenidades', 'Seguros e impuestos', 'Publicidad', 'Otro'],
 };
 
 const C = {
@@ -132,7 +143,8 @@ const C = {
   timber: 'var(--timber)', timberSoft: 'var(--timber-soft)', line: 'var(--line)',
 };
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 /* ---------- date + money helpers (all dates are 'YYYY-MM-DD' strings, handled in UTC to dodge DST) ---------- */
 
@@ -148,8 +160,8 @@ function todayISO() {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate(); // m is 1-based
-function fmtDate(s) { if (!s) return ''; const [y, m, d] = s.split('-').map(Number); return `${MONTH_NAMES[m - 1]} ${d}, ${y}`; }
-function fmtShort(s) { const [, m, d] = s.split('-').map(Number); return `${MONTH_NAMES[m - 1]} ${d}`; }
+function fmtDate(s) { if (!s) return ''; const [y, m, d] = s.split('-').map(Number); return `${d} ${MONTH_NAMES[m - 1]} ${y}`; }
+function fmtShort(s) { const [, m, d] = s.split('-').map(Number); return `${d} ${MONTH_NAMES[m - 1]}`; }
 
 function fmtMoney(n) {
   return (Number(n) || 0).toLocaleString('es-CO', { style: 'currency', currency: CURRENCY, maximumFractionDigits: 0 });
@@ -196,12 +208,12 @@ function nightShares(b) {
   return Array.from({ length: n }, (_, i) => ({ date: addDays(b.checkIn, i), amount: i === n - 1 ? b.total - base * (n - 1) : base }));
 }
 function findConflict(bookings, cand, ignoreId) {
-  return bookings.find((b) => b.id !== ignoreId && b.cabin === cand.cabin && b.checkIn < cand.checkOut && cand.checkIn < b.checkOut) || null;
+  return bookings.find((b) => b.id !== ignoreId &&b.checkIn < cand.checkOut && cand.checkIn < b.checkOut) || null;
 }
 
 /* ---------- chart periods: week (Sun-Sat), month, year ---------- */
 
-const PERIODS = [['week', 'Weekly'], ['month', 'Monthly'], ['year', 'Yearly']];
+const PERIODS = [['week', 'Semanal'], ['month', 'Mensual'], ['year', 'Anual']];
 const weekday = (d) => new Date(parseISO(d)).getUTCDay(); // 0 = Sunday
 /** First day of the period that contains date d. */
 function periodStart(d, period) {
@@ -227,7 +239,7 @@ function periodLabel(p, period, multiYear, end) {
   if (period === 'week') { const r = weekRef(p, end); return `W${weekNumber(r)}` + (multiYear ? ` '${r.slice(2, 4)}` : ''); }
   return MONTH_NAMES[Number(p.slice(5, 7)) - 1] + (multiYear ? ` '${p.slice(2, 4)}` : '');
 }
-/** Longer name for the chart tooltip, e.g. "W5 · Jan 25 – Jan 31, 2026". */
+/** Longer name for the chart tooltip, e.g. "W5 · 25 Ene – 31 Ene 2026". */
 function periodTitle(p, period, end) {
   if (period === 'year') return p.slice(0, 4);
   if (period === 'week') return `W${weekNumber(weekRef(p, end))} · ${fmtShort(p)} – ${fmtDate(addDays(p, 6))}`;
@@ -258,7 +270,7 @@ function computeRange(bookings, expenses, from, to, cabinCount, today, period = 
       const i = slot(d);
       if (d < start || d > end || i === undefined) return;
       rev[i] += amount; nights[i] += 1;
-      chan[b.channel || 'No channel'] = (chan[b.channel || 'No channel'] || 0) + amount;
+      chan[b.channel || 'Sin canal'] = (chan[b.channel || 'Sin canal'] || 0) + amount;
       if (d <= today) { nightsToDate += 1; lodgingToDate += amount; }
     });
   });
@@ -299,7 +311,7 @@ const sb = (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) ? window.supab
 const LS_PREFIX = 'cabinledger:';
 const newId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
 const lsRead = (key, fallback) => { try { const v = localStorage.getItem(LS_PREFIX + key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } };
-const lsWrite = (key, value) => { try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); return null; } catch (e) { return { message: 'Could not save in this browser (storage full or blocked).' }; } };
+const lsWrite = (key, value) => { try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); return null; } catch (e) { return { message: 'No se pudo guardar en este navegador (almacenamiento lleno o bloqueado).' }; } };
 const LOCAL_KEYS = ['bookings', 'expenses', 'config'];
 
 const store = sb ? {
@@ -323,9 +335,9 @@ const store = sb ? {
 // Rows saved by the first version (nightly_rate + cleaning_fee) are converted to a total when read, so nothing already entered is lost.
 const bookingFromDb = (r) => ({ id: r.id, guest: r.guest, phone: r.phone || '', cabin: r.cabin, checkIn: r.check_in, checkOut: r.check_out, guests: r.guests,
   total: r.total != null ? r.total : (r.nightly_rate || 0) * Math.max(0, nightsBetween(r.check_in, r.check_out)) + (r.cleaning_fee || 0),
-  channel: r.channel || '', paymentMethod: r.payment_method || '', notes: r.notes || '' });
+  channel: es(r.channel || ''), paymentMethod: es(r.payment_method || ''), notes: r.notes || '' });
 const bookingToDb = (b) => ({ guest: b.guest, phone: b.phone || null, cabin: b.cabin, check_in: b.checkIn, check_out: b.checkOut, guests: b.guests, total: b.total, channel: b.channel || null, payment_method: b.paymentMethod || null, notes: b.notes || null });
-const expenseFromDb = (r) => ({ id: r.id, date: r.date, category: r.category, description: r.description, amount: r.amount, ...(r.accrual_months ? { accrualMonths: r.accrual_months } : {}) });
+const expenseFromDb = (r) => ({ id: r.id, date: r.date, category: es(r.category), description: r.description, amount: r.amount, ...(r.accrual_months ? { accrualMonths: r.accrual_months } : {}) });
 const expenseToDb = (e) => ({ date: e.date, category: e.category, description: e.description, amount: e.amount, accrual_months: e.accrualMonths || null });
 
 /* Saving rules (so the app never implies something was saved when it wasn't):
@@ -333,16 +345,24 @@ const expenseToDb = (e) => ({ date: e.date, category: e.category, description: e
    - lists and tables only update after the database confirms the write (no optimistic updates);
    - a failed write returns its error to the form, which stays open with the data still in it;
    - a failed read is reported through onLoadError and is never treated as "no data". */
-const OFFLINE_MSG = 'No internet connection - nothing was saved.';
+const OFFLINE_MSG = 'Sin conexión a internet: no se guardó nada.';
 const isOffline = () => !!sb && !navigator.onLine;
-const errMsg = (e) => (e && e.message) || 'Something went wrong — nothing was saved.';
+// Supabase answers in English; the messages people are likely to see are translated, anything else is shown as is.
+const SERVER_MESSAGES = {
+  'Invalid login credentials': 'Correo o contraseña incorrectos.',
+  'Email not confirmed': 'Este correo aún no está confirmado.',
+  'Failed to fetch': 'No se pudo conectar con el servidor.',
+};
+const errMsg = (e) => (e && e.message && (SERVER_MESSAGES[e.message] || e.message)) || 'Algo salió mal: no se guardó nada.';
+const TABLE_NAMES = { bookings: 'las reservas', expenses: 'los gastos' };
+const LIST_NAMES = { payment_methods: 'medios de pago', channels: 'canales', categories: 'categorías' };
 
 function useTable(table, fromDb, toDb, orderCol, onError, onLoadError, tick) {
   const [items, setItems] = useState([]);
   const refresh = useCallback(async () => {
     let res;
     try { res = await store.list(table, orderCol); } catch (e) { res = { error: e }; }
-    if (res.error) { onLoadError(table, `Couldn't load ${table}: ${errMsg(res.error)}`); return; }
+    if (res.error) { onLoadError(table, `No se pudieron cargar ${TABLE_NAMES[table] || table}: ${errMsg(res.error)}`); return; }
     onLoadError(table, '');
     setItems(res.data.map(fromDb));
   }, [table, orderCol]);
@@ -377,12 +397,12 @@ function useConfigList(key, onError, onLoadError, tick) {
       try { res = await store.getConfig(key); } catch (e) { res = { items: null, error: e }; }
       if (!alive) return;
       // Only seed the defaults when the read SUCCEEDED and found nothing; a failed read must not overwrite real data.
-      if (res.error) { onLoadError(key, `Couldn't load your ${key.replace('_', ' ')} list: ${errMsg(res.error)}`); return; }
-      if (res.items) { onLoadError(key, ''); setItems(res.items); return; }
+      if (res.error) { onLoadError(key, `No se pudo cargar la lista de ${LIST_NAMES[key] || key}: ${errMsg(res.error)}`); return; }
+      if (res.items) { onLoadError(key, ''); setItems([...new Set(res.items.map(es))]); return; }
       const seed = DEFAULTS[key] || [];
       let err; try { err = await store.setConfig(key, seed); } catch (e) { err = e; }
       if (!alive) return;
-      if (err) { onLoadError(key, `Couldn't set up the ${key.replace('_', ' ')} list: ${errMsg(err)}`); return; }
+      if (err) { onLoadError(key, `No se pudo crear la lista de ${LIST_NAMES[key] || key}: ${errMsg(err)}`); return; }
       onLoadError(key, ''); setItems(seed);
     })();
     return () => { alive = false; };
@@ -479,13 +499,13 @@ function DateRangeFilter({ from, to, onFromChange, onToChange, presets }) {
   return (
     <div className="row g3 wrap">
       <div className="row g2 small soft">
-        <span>From</span>
+        <span>Desde</span>
         <TextInput type="date" value={from} max={to || undefined} onChange={(e) => onFromChange(e.target.value)} style={{ width: 'auto' }} />
-        <span>To</span>
+        <span>Hasta</span>
         <TextInput type="date" value={to} min={from || undefined} onChange={(e) => onToChange(e.target.value)} style={{ width: 'auto' }} />
       </div>
       {presets}
-      {from || to ? <button type="button" className="btn-link" onClick={() => { onFromChange(''); onToChange(''); }}>Clear dates</button> : null}
+      {from || to ? <button type="button" className="btn-link" onClick={() => { onFromChange(''); onToChange(''); }}>Borrar fechas</button> : null}
     </div>
   );
 }
@@ -531,8 +551,8 @@ function ListManager({ title, items, onAdd, onRemove, placeholder, hint, renderE
   const [error, setError] = useState('');
   async function submit() {
     const t = name.trim();
-    if (!t) { setError('Enter a name.'); return; }
-    if (items.some((i) => i.toLowerCase() === t.toLowerCase())) { setError('Already on the list.'); return; }
+    if (!t) { setError('Escribe un nombre.'); return; }
+    if (items.some((i) => i.toLowerCase() === t.toLowerCase())) { setError('Ya está en la lista.'); return; }
     const err = await onAdd(t);
     if (err) { setError(err.message); return; } // keep what was typed so it can be retried
     setError(''); setName('');
@@ -540,19 +560,19 @@ function ListManager({ title, items, onAdd, onRemove, placeholder, hint, renderE
   return (
     <div className={title ? 'card col g3' : 'col g3'} style={title ? undefined : { border: `1px solid ${C.line}`, borderRadius: 6, padding: 12 }}>
       {title ? <div><div style={{ fontSize: 15 }}>{title}</div>{hint ? <div className="xs soft">{hint}</div> : null}</div> : null}
-      {items.length === 0 ? <div className="xs soft">Nothing here yet.</div> : (
+      {items.length === 0 ? <div className="xs soft">Aún no hay nada.</div> : (
         <div className="row wrap g2">
           {items.map((p) => (
             <span key={p} className="row g1 xs" style={{ background: C.forestSoft, color: C.forest, borderRadius: 999, padding: '4px 8px' }}>
               {p}
-              <button type="button" onClick={() => onRemove(p)} aria-label={`Remove ${p}`} className="icon-btn" style={{ color: C.forest }}><Icon.X size={12} /></button>
+              <button type="button" onClick={() => onRemove(p)} aria-label={`Quitar ${p}`} className="icon-btn" style={{ color: C.forest }}><Icon.X size={12} /></button>
             </span>
           ))}
         </div>
       )}
       <div className="row g2">
         <TextInput type="text" placeholder={placeholder} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }} />
-        <Btn type="button" onClick={submit} accent={C.ink} style={{ color: C.paper }}>Add</Btn>
+        <Btn type="button" onClick={submit} accent={C.ink} style={{ color: C.paper }}>Agregar</Btn>
       </div>
       {error ? <div className="xs" style={{ color: C.clay }}>{error}</div> : null}
     </div>
@@ -566,11 +586,11 @@ function ManagedSelect({ label, value, onChange, items, onAddItem, onRemoveItem,
     <div className="col g1">
       <div className="row between">
         <span className="small soft">{label}</span>
-        <button type="button" className="btn-link" onClick={() => setManaging((v) => !v)}>{managing ? 'Done' : 'Manage list'}</button>
+        <button type="button" className="btn-link" onClick={() => setManaging((v) => !v)}>{managing ? 'Listo' : 'Editar lista'}</button>
       </div>
       {managing
         ? <ListManager items={items} onAdd={onAddItem} onRemove={onRemoveItem} placeholder={placeholder} />
-        : <Select value={value} onChange={onChange}><option value="">{items.length ? `Select ${label.toLowerCase()}` : 'Nothing yet — use Manage list to add one'}</option>{items.map((i) => <option key={i}>{i}</option>)}</Select>}
+        : <Select value={value} onChange={onChange}><option value="">{items.length ? 'Elige una opción' :'Aún no hay ninguna: usa Editar lista para agregar'}</option>{items.map((i) => <option key={i}>{i}</option>)}</Select>}
     </div>
   );
 }
@@ -578,29 +598,26 @@ function ManagedSelect({ label, value, onChange, items, onAddItem, onRemoveItem,
 function RowActions({ onEdit, onDelete }) {
   return (
     <div className="row g2" style={{ justifyContent: 'flex-end' }}>
-      <button className="icon-btn" onClick={onEdit} aria-label="Edit"><Icon.Pencil size={14} /></button>
-      <button className="icon-btn" onClick={onDelete} aria-label="Delete"><Icon.Trash size={14} /></button>
+      <button className="icon-btn" onClick={onEdit} aria-label="Editar"><Icon.Pencil size={14} /></button>
+      <button className="icon-btn" onClick={onDelete} aria-label="Eliminar"><Icon.Trash size={14} /></button>
     </div>
   );
 }
 
 /* ---------- booking form (used for new entries on the Bookings tab and for edits on the Records tab) ---------- */
 
-function BookingForm({ editing, bookings, cabins, channels, onAdd, onSave, onDone, onCancel }) {
+function BookingForm({ editing, bookings, channels, paymentMethods, onAdd, onSave, onDone, onCancel }) {
   const today = todayISO();
   const [f, setF] = useState(() => editing ? {
-    guest: editing.guest, phone: editing.phone, cabin: editing.cabin, guests: String(editing.guests), checkIn: editing.checkIn, checkOut: editing.checkOut,
+    guest: editing.guest, phone: editing.phone, guests: String(editing.guests), checkIn: editing.checkIn, checkOut: editing.checkOut,
     total: String(editing.total), channel: editing.channel, paymentMethod: editing.paymentMethod, notes: editing.notes,
   } : {
-    guest: '', phone: '', cabin: cabins.length === 1 ? cabins[0] : '', guests: '2', checkIn: today, checkOut: addDays(today, 2),
+    guest: '', phone: '', guests: '2', checkIn: today, checkOut: addDays(today, 2),
     total: '', channel: channels[0] || '', paymentMethod: '', notes: '',
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const set = (patch) => setF((p) => ({ ...p, ...patch }));
-
-  // The cabin list loads after the form first renders; with a single cabin, select it automatically.
-  useEffect(() => { if (!f.cabin && cabins.length === 1) set({ cabin: cabins[0] }); }, [cabins.length]);
 
   const nights = f.checkIn && f.checkOut ? nightsBetween(f.checkIn, f.checkOut) : 0;
   const total = Number(f.total) || 0;
@@ -608,16 +625,16 @@ function BookingForm({ editing, bookings, cabins, channels, onAdd, onSave, onDon
 
   async function submit(e) {
     e.preventDefault();
-    if (!f.guest.trim() || !f.cabin || !f.checkIn || !f.checkOut) { setError('Fill in guest name, cabin and both dates.'); return; }
-    if (nights < 1) { setError('Check-out must be at least one day after check-in.'); return; }
-    if (!f.guests || !isWhole(f.guests, 1)) { setError('Number of guests must be a whole number, 1 or more.'); return; }
-    if (f.total === '' || !isWhole(f.total, 0)) { setError('Enter the total as a whole number (0 or more).'); return; }
+    if (!f.guest.trim() || !f.checkIn || !f.checkOut) { setError('Completa el nombre del huésped y las dos fechas.'); return; }
+    if (nights < 1) { setError('La salida debe ser al menos un día después de la llegada.'); return; }
+    if (!f.guests || !isWhole(f.guests, 1)) { setError('El número de huéspedes debe ser un número entero, 1 o más.'); return; }
+    if (f.total === '' || !isWhole(f.total, 0)) { setError('Escribe el total como un número entero (0 o más).'); return; }
     const rec = {
-      guest: f.guest.trim(), phone: f.phone.trim(), cabin: f.cabin, guests: Number(f.guests), checkIn: f.checkIn, checkOut: f.checkOut,
+      guest: f.guest.trim(), phone: f.phone.trim(), cabin: editing ? editing.cabin : CABIN, guests: Number(f.guests), checkIn: f.checkIn, checkOut: f.checkOut,
       total: Number(f.total), channel: f.channel, paymentMethod: f.paymentMethod, notes: f.notes.trim(),
     };
     const clash = findConflict(bookings, rec, editing ? editing.id : null);
-    if (clash) { setError(`${rec.cabin} is already booked ${fmtShort(clash.checkIn)} → ${fmtShort(clash.checkOut)} (${clash.guest}). Pick other dates or another cabin.`); return; }
+    if (clash) { setError(`La cabaña ya está reservada del ${fmtShort(clash.checkIn)} al ${fmtShort(clash.checkOut)} (${clash.guest}). Elige otras fechas.`); return; }
     setError(''); setSaving(true);
     try {
       const err = editing ? await onSave(editing.id, rec) : await onAdd(rec);
@@ -628,20 +645,14 @@ function BookingForm({ editing, bookings, cabins, channels, onAdd, onSave, onDon
 
   return (
     <form onSubmit={submit} className="card col g4" style={{ maxWidth: 720 }}>
-      <SectionTitle>{editing ? `Edit booking — ${editing.guest}` : 'New booking'}</SectionTitle>
+      <SectionTitle>{editing ? `Editar reserva — ${editing.guest}` : 'Nueva reserva'}</SectionTitle>
       <div className="row g4 stack-sm">
-        <Field label="Guest name"><TextInput type="text" value={f.guest} onChange={(e) => set({ guest: e.target.value })} /></Field>
-        <Field label="Phone / contact" hint="Optional"><TextInput type="text" value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
+        <Field label="Nombre del huésped"><TextInput type="text" value={f.guest} onChange={(e) => set({ guest: e.target.value })} /></Field>
+        <Field label="Teléfono / contacto" hint="Opcional"><TextInput type="text" value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
       </div>
       <div className="row g4 stack-sm">
-        <Field label="Cabin">
-          <Select value={f.cabin} onChange={(e) => set({ cabin: e.target.value })}>
-            <option value="">{cabins.length ? 'Select cabin' : 'Add a cabin in Settings first'}</option>
-            {cabins.map((c) => <option key={c} value={c}>{c}</option>)}
-          </Select>
-        </Field>
-        <Field label="Guests"><TextInput type="number" min="1" step="1" value={f.guests} onChange={(e) => set({ guests: e.target.value })} /></Field>
-        <Field label="Channel">
+        <Field label="Huéspedes"><TextInput type="number" min="1" step="1" value={f.guests} onChange={(e) => set({ guests: e.target.value })} /></Field>
+        <Field label="Canal">
           <Select value={f.channel} onChange={(e) => set({ channel: e.target.value })}>
             <option value="">—</option>
             {channels.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -649,31 +660,32 @@ function BookingForm({ editing, bookings, cabins, channels, onAdd, onSave, onDon
         </Field>
       </div>
       <div className="row g4 stack-sm">
-        <Field label="Check-in"><TextInput type="date" value={f.checkIn} onChange={(e) => {
+        <Field label="Llegada"><TextInput type="date" value={f.checkIn} onChange={(e) => {
           const checkIn = e.target.value;
           set({ checkIn, ...(checkIn && f.checkOut <= checkIn ? { checkOut: addDays(checkIn, 1) } : {}) });
         }} /></Field>
-        <Field label="Check-out"><TextInput type="date" value={f.checkOut} min={f.checkIn ? addDays(f.checkIn, 1) : undefined} onChange={(e) => set({ checkOut: e.target.value })} /></Field>
+        <Field label="Salida"><TextInput type="date" value={f.checkOut} min={f.checkIn ? addDays(f.checkIn, 1) : undefined} onChange={(e) => set({ checkOut: e.target.value })} /></Field>
       </div>
       <div className="row g4 stack-sm">
         <Field label="Total"><MoneyInput value={f.total} onChange={(e) => set({ total: e.target.value })} /></Field>
-        <Field label="Payment method">
+        <Field label="Medio de pago">
           <Select value={f.paymentMethod} onChange={(e) => set({ paymentMethod: e.target.value })}>
             <option value="">—</option>
-            {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+            {/* a method removed from the list in Ajustes still shows on the bookings that used it */}
+            {(f.paymentMethod && !paymentMethods.includes(f.paymentMethod) ? [...paymentMethods, f.paymentMethod] : paymentMethods).map((m) => <option key={m} value={m}>{m}</option>)}
           </Select>
         </Field>
       </div>
-      <Field label="Notes" hint="Optional — arrival time, pets, allergies, special requests">
+      <Field label="Notas" hint="Opcional: hora de llegada, mascotas, alergias, solicitudes especiales">
         <textarea value={f.notes} onChange={(e) => set({ notes: e.target.value })} style={{ ...inputStyle, minHeight: 64, resize: 'vertical' }} />
       </Field>
       <div className="small soft">
-        {nights > 0 ? <>{nights} night{nights > 1 ? 's' : ''}{total ? <> · about <span className="tabular" style={{ color: C.ink }}>{fmtMoney(Math.round(total / nights))}</span> per night</> : null}</> : 'Pick valid dates to see the number of nights.'}
+        {nights > 0 ? <>{plural(nights, 'noche', 'noches')}{total ? <> · unos <span className="tabular" style={{ color: C.ink }}>{fmtMoney(Math.round(total / nights))}</span> por noche</> : null}</> : 'Elige fechas válidas para ver el número de noches.'}
       </div>
       {error ? <div className="small" style={{ color: C.clay }}>{error}</div> : null}
       <div className="row g2" style={{ justifyContent: 'flex-end' }}>
-        {onCancel ? <Btn type="button" kind="ghost" onClick={onCancel}>Cancel</Btn> : null}
-        <Btn type="submit" disabled={saving}>{saving ? <Icon.Loader size={14} className="spin" /> : editing ? <Icon.Check size={14} /> : <Icon.Plus size={14} />}{editing ? 'Save changes' : 'Add booking'}</Btn>
+        {onCancel ? <Btn type="button" kind="ghost" onClick={onCancel}>Cancelar</Btn> : null}
+        <Btn type="submit" disabled={saving}>{saving ? <Icon.Loader size={14} className="spin" /> : editing ? <Icon.Check size={14} /> : <Icon.Plus size={14} />}{editing ? 'Guardar cambios' : 'Agregar reserva'}</Btn>
       </div>
     </form>
   );
@@ -693,9 +705,9 @@ function ExpenseForm({ editing, categories, onAddCategory, onRemoveCategory, onA
 
   async function submit(e) {
     e.preventDefault();
-    if (!date || !category || !description.trim() || !amount) { setError('Fill in date, category, description and amount.'); return; }
-    if (!Number.isInteger(Number(amount)) || Number(amount) <= 0) { setError('Amount must be a whole number greater than zero.'); return; }
-    if (spread && (!Number.isInteger(Number(months)) || Number(months) < 2)) { setError('Enter 2 or more months to spread this expense over.'); return; }
+    if (!date || !category || !description.trim() || !amount) { setError('Completa la fecha, la categoría, la descripción y el valor.'); return; }
+    if (!Number.isInteger(Number(amount)) || Number(amount) <= 0) { setError('El valor debe ser un número entero mayor que cero.'); return; }
+    if (spread && (!Number.isInteger(Number(months)) || Number(months) < 2)) { setError('Escribe 2 o más meses para repartir este gasto.'); return; }
     setError(''); setSaving(true);
     const rec = { date, category, description: description.trim(), amount: Number(amount), ...(spread ? { accrualMonths: Number(months) } : {}) };
     try {
@@ -706,25 +718,25 @@ function ExpenseForm({ editing, categories, onAddCategory, onRemoveCategory, onA
   }
   return (
     <form onSubmit={submit} className="card col g4" style={{ maxWidth: 520 }}>
-      <SectionTitle>{editing ? 'Edit expense' : 'New expense'}</SectionTitle>
-      <Field label="Date"><TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-      <ManagedSelect label="Category" value={category} onChange={(e) => setCategory(e.target.value)} items={categories}
-        onAddItem={onAddCategory} onRemoveItem={onRemoveCategory} placeholder="New category name" />
-      <Field label="Description"><TextInput type="text" placeholder="e.g. Firewood delivery, 2 cords" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
-      <Field label="Amount"><MoneyInput value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+      <SectionTitle>{editing ? 'Editar gasto' : 'Nuevo gasto'}</SectionTitle>
+      <Field label="Fecha"><TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+      <ManagedSelect label="Categoría" value={category} onChange={(e) => setCategory(e.target.value)} items={categories}
+        onAddItem={onAddCategory} onRemoveItem={onRemoveCategory} placeholder="Nombre de la nueva categoría" />
+      <Field label="Descripción"><TextInput type="text" placeholder="p. ej. Entrega de leña, 2 cargas" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
+      <Field label="Valor"><MoneyInput value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
       <div className="col g2" style={{ border: `1px solid ${C.line}`, borderRadius: 6, padding: 12 }}>
         <label className="row g2 small" style={{ cursor: 'pointer' }}>
           <input type="checkbox" checked={spread} onChange={(e) => setSpread(e.target.checked)} />
-          Spread over several months (insurance, roof repair, appliance…)
+          Repartir en varios meses (seguro, arreglo del techo, electrodoméstico…)
         </label>
-        {spread ? <Field label="Number of months" hint={Number(months) >= 2 && Number(amount) > 0 ? `≈ ${fmtMoney(Math.floor(Number(amount) / Number(months)))} per month starting ${fmtDate(date)}` : undefined}>
-          <TextInput type="number" min="2" step="1" placeholder="e.g. 12" value={months} onChange={(e) => setMonths(e.target.value)} />
+        {spread ? <Field label="Número de meses" hint={Number(months) >= 2 && Number(amount) > 0 ? `≈ ${fmtMoney(Math.floor(Number(amount) / Number(months)))} al mes desde el ${fmtDate(date)}` : undefined}>
+          <TextInput type="number" min="2" step="1" placeholder="p. ej. 12" value={months} onChange={(e) => setMonths(e.target.value)} />
         </Field> : null}
       </div>
       {error ? <div className="small" style={{ color: C.clay }}>{error}</div> : null}
       <div className="row g2" style={{ justifyContent: 'flex-end' }}>
-        {onCancel ? <Btn type="button" kind="ghost" onClick={onCancel}>Cancel</Btn> : null}
-        <Btn type="submit" disabled={saving} accent={C.clay}>{saving ? <Icon.Loader size={14} className="spin" /> : editing ? <Icon.Check size={14} /> : <Icon.Plus size={14} />}{editing ? 'Save changes' : 'Add expense'}</Btn>
+        {onCancel ? <Btn type="button" kind="ghost" onClick={onCancel}>Cancelar</Btn> : null}
+        <Btn type="submit" disabled={saving} accent={C.clay}>{saving ? <Icon.Loader size={14} className="spin" /> : editing ? <Icon.Check size={14} /> : <Icon.Plus size={14} />}{editing ? 'Guardar cambios' : 'Agregar gasto'}</Btn>
       </div>
     </form>
   );
@@ -732,42 +744,41 @@ function ExpenseForm({ editing, categories, onAddCategory, onRemoveCategory, onA
 
 /* ---------- entry tabs: just the form ---------- */
 
-function BookingsTab({ bookings, cabins, channels, onAdd, notify }) {
+function BookingsTab({ bookings, channels, paymentMethods, onAdd, notify }) {
   const [n, setN] = useState(0); // bumping the key gives a fresh blank form after each save
-  return <BookingForm key={n} bookings={bookings} cabins={cabins} channels={channels} onAdd={onAdd}
-    onDone={() => { setN((v) => v + 1); notify('Booking added'); window.scrollTo({ top: 0 }); }} />;
+  return <BookingForm key={n} bookings={bookings} channels={channels} paymentMethods={paymentMethods} onAdd={onAdd}
+    onDone={() => { setN((v) => v + 1); notify('Reserva agregada'); window.scrollTo({ top: 0 }); }} />;
 }
 
 function ExpensesTab({ categories, onAddCategory, onRemoveCategory, onAdd, notify }) {
   const [n, setN] = useState(0);
   return <ExpenseForm key={n} categories={categories} onAddCategory={onAddCategory} onRemoveCategory={onRemoveCategory} onAdd={onAdd}
-    onDone={() => { setN((v) => v + 1); notify('Expense added'); window.scrollTo({ top: 0 }); }} />;
+    onDone={() => { setN((v) => v + 1); notify('Gasto agregado'); window.scrollTo({ top: 0 }); }} />;
 }
 
 /* ---------- records tab: look back at, filter, edit and delete saved entries ---------- */
 
-function RecordsTab({ bookings, expenses, cabins, channels, categories, onAddCategory, onRemoveCategory,
+function RecordsTab({ bookings, expenses, channels, paymentMethods, categories, onAddCategory, onRemoveCategory,
   onSaveBooking, onSaveExpense, onRemoveBooking, onRemoveExpense, onExport, notify }) {
   const [type, setType] = useState('bookings');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [cabin, setCabin] = useState('');
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null); // { type, rec }
   const q = search.toLowerCase();
 
-  const bookingRows = useMemo(() => bookings.filter((b) => (!from || b.checkIn >= from) && (!to || b.checkIn <= to) && (!cabin || b.cabin === cabin)
-    && (!q || `${b.guest} ${b.phone} ${b.notes} ${b.channel}`.toLowerCase().includes(q))).sort((a, b) => b.checkIn.localeCompare(a.checkIn)), [bookings, from, to, cabin, q]);
+  const bookingRows = useMemo(() => bookings.filter((b) => (!from || b.checkIn >= from) && (!to || b.checkIn <= to)
+    && (!q || `${b.guest} ${b.phone} ${b.notes} ${b.channel}`.toLowerCase().includes(q))).sort((a, b) => b.checkIn.localeCompare(a.checkIn)), [bookings, from, to, q]);
   const expenseRows = useMemo(() => expenses.filter((e) => (!from || e.date >= from) && (!to || e.date <= to) && (!category || e.category === category)
     && (!q || `${e.category} ${e.description}`.toLowerCase().includes(q))).sort((a, b) => b.date.localeCompare(a.date)), [expenses, from, to, category, q]);
 
   function startEdit(t, rec) { setEditing({ t, rec }); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   const closeEdit = () => setEditing(null);
-  const done = () => { closeEdit(); notify('Changes saved'); };
+  const done = () => { closeEdit(); notify('Cambios guardados'); };
 
   if (editing && editing.t === 'bookings') {
-    return <BookingForm key={editing.rec.id} editing={editing.rec} bookings={bookings} cabins={cabins} channels={channels}
+    return <BookingForm key={editing.rec.id} editing={editing.rec} bookings={bookings} channels={channels} paymentMethods={paymentMethods}
       onSave={onSaveBooking} onDone={done} onCancel={closeEdit} />;
   }
   if (editing && editing.t === 'expenses') {
@@ -777,43 +788,42 @@ function RecordsTab({ bookings, expenses, cabins, channels, categories, onAddCat
 
   const bookingTotals = bookingRows.reduce((s, b) => s + b.total, 0);
   const expenseTotal = expenseRows.reduce((s, e) => s + e.amount, 0);
-  const filtered = !!(from || to || cabin || category || search);
+  const filtered = !!(from || to || category || search);
 
   return (
     <div className="col g4">
       <div className="row g3 wrap">
         <div className="row" style={{ border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden' }}>
-          {[['bookings', 'Bookings'], ['expenses', 'Expenses']].map(([id, label]) => (
+          {[['bookings', 'Reservas'], ['expenses', 'Gastos']].map(([id, label]) => (
             <button key={id} onClick={() => setType(id)} className="small" style={{ padding: '7px 14px', border: 'none', cursor: 'pointer', background: type === id ? C.forest : C.panel, color: type === id ? '#fff' : C.inkSoft }}>{label}</button>
           ))}
         </div>
-        {type === 'bookings' && cabins.length > 1 ? <Select value={cabin} onChange={(e) => setCabin(e.target.value)} style={{ width: 'auto' }}><option value="">All cabins</option>{cabins.map((c) => <option key={c}>{c}</option>)}</Select> : null}
-        {type === 'expenses' ? <Select value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: 'auto' }}><option value="">All categories</option>{categories.map((c) => <option key={c}>{c}</option>)}</Select> : null}
-        <TextInput type="search" placeholder={type === 'bookings' ? 'Search guest, phone, notes…' : 'Search description…'} value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 240 }} />
+        {type === 'expenses' ? <Select value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: 'auto' }}><option value="">Todas las categorías</option>{categories.map((c) => <option key={c}>{c}</option>)}</Select> : null}
+        <TextInput type="search" placeholder={type === 'bookings' ? 'Buscar huésped, teléfono, notas…' : 'Buscar descripción…'} value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 240 }} />
       </div>
       <div className="row between wrap g3">
         <DateRangeFilter from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
         <span className="small soft">
-          {type === 'bookings' ? `${bookingRows.length} booking${bookingRows.length === 1 ? '' : 's'} · ${fmtMoney(bookingTotals)}` : `${expenseRows.length} expense${expenseRows.length === 1 ? '' : 's'} · ${fmtMoney(expenseTotal)}`}
+          {type === 'bookings' ? `${plural(bookingRows.length, 'reserva', 'reservas')} · ${fmtMoney(bookingTotals)}` : `${plural(expenseRows.length, 'gasto', 'gastos')} · ${fmtMoney(expenseTotal)}`}
         </span>
       </div>
-      <div className="xs soft" style={{ marginTop: -8 }}>{type === 'bookings' ? 'Dates filter by check-in day.' : 'Dates filter by the day the expense was paid.'}</div>
+      <div className="xs soft" style={{ marginTop: -8 }}>{type === 'bookings' ? 'Las fechas filtran por el día de llegada.' : 'Las fechas filtran por el día en que se pagó el gasto.'}</div>
 
       {type === 'bookings' ? (
-        bookingRows.length === 0 ? <EmptyState text={filtered ? 'No bookings match these filters.' : 'No bookings yet.'} /> : (
+        bookingRows.length === 0 ? <EmptyState text={filtered ? 'Ninguna reserva coincide con estos filtros.' : 'Aún no hay reservas.'} /> : (
           <div className="card scroll-x" style={{ padding: '4px 16px' }}>
             <table>
-              <thead><tr><th>Guest</th><th>Cabin</th><th>Stay</th><th className="num">Total</th><th>Channel</th><th></th></tr></thead>
+              <thead><tr><th>Huésped</th><th>Estadía</th><th className="num">Total</th><th>Canal</th><th>Medio de pago</th><th></th></tr></thead>
               <tbody>
                 {bookingRows.map((b) => {
                   return (
                     <tr key={b.id}>
-                      <td><div>{b.guest}</div><div className="xs soft">{b.guests} guest{b.guests > 1 ? 's' : ''}{b.phone ? ` · ${b.phone}` : ''}</div>{b.notes ? <div className="xs soft" style={{ maxWidth: 240, whiteSpace: 'pre-wrap' }}>{b.notes}</div> : null}</td>
-                      <td>{b.cabin}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{fmtShort(b.checkIn)} → {fmtShort(b.checkOut)}, {b.checkOut.slice(0, 4)}<div className="xs soft">{bookingNights(b)} night{bookingNights(b) > 1 ? 's' : ''} · about {fmtMoney(bookingAvgNight(b))}/night</div></td>
+                      <td><div>{b.guest}</div><div className="xs soft">{plural(b.guests, 'huésped', 'huéspedes')}{b.phone ? ` · ${b.phone}` : ''}</div>{b.notes ? <div className="xs soft" style={{ maxWidth: 240, whiteSpace: 'pre-wrap' }}>{b.notes}</div> : null}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{fmtShort(b.checkIn)} → {fmtShort(b.checkOut)}, {b.checkOut.slice(0, 4)}<div className="xs soft">{plural(bookingNights(b), 'noche', 'noches')} · unos {fmtMoney(bookingAvgNight(b))}/noche</div></td>
                       <td className="num tabular">{fmtMoney(b.total)}</td>
                       <td>{b.channel || <span className="soft">—</span>}</td>
-                      <td><RowActions onEdit={() => startEdit('bookings', b)} onDelete={() => { if (window.confirm(`Delete the booking for ${b.guest}? This can't be undone.`)) onRemoveBooking(b.id); }} /></td>
+                      <td>{b.paymentMethod || <span className="soft">—</span>}</td>
+                      <td><RowActions onEdit={() => startEdit('bookings', b)} onDelete={() => { if (window.confirm(`¿Eliminar la reserva de ${b.guest}? No se puede deshacer.`)) onRemoveBooking(b.id); }} /></td>
                     </tr>
                   );
                 })}
@@ -822,18 +832,18 @@ function RecordsTab({ bookings, expenses, cabins, channels, categories, onAddCat
           </div>
         )
       ) : (
-        expenseRows.length === 0 ? <EmptyState text={filtered ? 'No expenses match these filters.' : 'No expenses yet.'} /> : (
+        expenseRows.length === 0 ? <EmptyState text={filtered ? 'Ningún gasto coincide con estos filtros.' : 'Aún no hay gastos.'} /> : (
           <div className="card scroll-x" style={{ padding: '4px 16px' }}>
             <table>
-              <thead><tr><th>Date</th><th>Category</th><th>Description</th><th className="num">Amount</th><th></th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th className="num">Valor</th><th></th></tr></thead>
               <tbody>
                 {expenseRows.map((e) => (
                   <tr key={e.id}>
                     <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(e.date)}</td>
                     <td>{e.category}</td>
-                    <td>{e.description}{e.accrualMonths > 1 ? <div className="xs soft">spread over {e.accrualMonths} months</div> : null}</td>
+                    <td>{e.description}{e.accrualMonths > 1 ? <div className="xs soft">repartido en {e.accrualMonths} meses</div> : null}</td>
                     <td className="num tabular">{fmtMoney(e.amount)}</td>
-                    <td><RowActions onEdit={() => startEdit('expenses', e)} onDelete={() => { if (window.confirm('Delete this expense?')) onRemoveExpense(e.id); }} /></td>
+                    <td><RowActions onEdit={() => startEdit('expenses', e)} onDelete={() => { if (window.confirm('¿Eliminar este gasto?')) onRemoveExpense(e.id); }} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -841,7 +851,7 @@ function RecordsTab({ bookings, expenses, cabins, channels, categories, onAddCat
           </div>
         )
       )}
-      <div><Btn kind="ghost" onClick={onExport}><Icon.Download size={14} /> Export everything to Excel</Btn></div>
+      <div><Btn kind="ghost" onClick={onExport}><Icon.Download size={14} /> Exportar todo a Excel</Btn></div>
     </div>
   );
 }
@@ -860,21 +870,21 @@ function PeriodToggle({ value, onChange }) {
   );
 }
 
-function DashboardTab({ bookings, expenses, cabins }) {
+function DashboardTab({ bookings, expenses }) {
   const today = todayISO();
   const thisYear = today.slice(0, 4);
   const [from, setFrom] = useState(`${thisYear}-01-01`);
   const [to, setTo] = useState(`${thisYear}-12-31`);
   const [revPeriod, setRevPeriod] = useState('month');
   const [occPeriod, setOccPeriod] = useState('month');
-  const y = useMemo(() => computeRange(bookings, expenses, from, to, cabins.length, today), [bookings, expenses, from, to, cabins.length, today]);
-  const revY = useMemo(() => computeRange(bookings, expenses, from, to, cabins.length, today, revPeriod), [bookings, expenses, from, to, cabins.length, today, revPeriod]);
-  const occY = useMemo(() => computeRange(bookings, expenses, from, to, cabins.length, today, occPeriod), [bookings, expenses, from, to, cabins.length, today, occPeriod]);
+  const y = useMemo(() => computeRange(bookings, expenses, from, to, 1, today), [bookings, expenses, from, to, today]);
+  const revY = useMemo(() => computeRange(bookings, expenses, from, to, 1, today, revPeriod), [bookings, expenses, from, to, today, revPeriod]);
+  const occY = useMemo(() => computeRange(bookings, expenses, from, to, 1, today, occPeriod), [bookings, expenses, from, to, today, occPeriod]);
 
   const presets = (
     <div className="row g3">
-      <button type="button" className="btn-link" onClick={() => { setFrom(`${thisYear}-01-01`); setTo(`${thisYear}-12-31`); }}>This year</button>
-      <button type="button" className="btn-link" onClick={() => { setFrom(addDays(today, -364)); setTo(today); }}>Last 12 months</button>
+      <button type="button" className="btn-link" onClick={() => { setFrom(`${thisYear}-01-01`); setTo(`${thisYear}-12-31`); }}>Este año</button>
+      <button type="button" className="btn-link" onClick={() => { setFrom(addDays(today, -364)); setTo(today); }}>Últimos 12 meses</button>
     </div>
   );
 
@@ -882,31 +892,31 @@ function DashboardTab({ bookings, expenses, cabins }) {
     <div className="col g6">
       <div className="col g1">
         <DateRangeFilter from={from} to={to} onFromChange={setFrom} onToChange={setTo} presets={presets} />
-        {!from && !to ? <div className="xs soft">Showing everything on record.</div> : null}
+        {!from && !to ? <div className="xs soft">Mostrando todo lo registrado.</div> : null}
       </div>
-      {!y ? <EmptyState text="The “From” date has to be on or before the “To” date." /> : <>
+      {!y ? <EmptyState text="La fecha “Desde” debe ser igual o anterior a la fecha “Hasta”." /> : <>
         <div className="row g3 wrap">
-          <KpiCard label="Revenue" value={fmtMoney(y.revenue)} sub="Booked nights in this period" accent={C.forest} />
-          <KpiCard label="Expenses" value={fmtMoney(y.expenses)} sub="Spread costs counted monthly" accent={C.clay} />
-          <KpiCard label="Net" value={fmtMoney(y.revenue - y.expenses)} sub="Revenue − expenses" accent={y.revenue - y.expenses >= 0 ? C.forest : C.clay} />
-          <KpiCard label="Occupancy" value={y.occupancy === null ? '—' : `${y.occupancy}%`} sub={`${y.nightsToDate} night${y.nightsToDate === 1 ? '' : 's'} sold up to today`} accent={C.timber} />
-          <KpiCard label="Avg. nightly rate" value={y.adr === null ? '—' : fmtMoney(y.adr)} sub="Per night sold" accent={C.timber} />
+          <KpiCard label="Ingresos" value={fmtMoney(y.revenue)} sub="Noches reservadas en este periodo" accent={C.forest} />
+          <KpiCard label="Gastos" value={fmtMoney(y.expenses)} sub="Gastos repartidos, contados por mes" accent={C.clay} />
+          <KpiCard label="Neto" value={fmtMoney(y.revenue - y.expenses)} sub="Ingresos − gastos" accent={y.revenue - y.expenses >= 0 ? C.forest : C.clay} />
+          <KpiCard label="Ocupación" value={y.occupancy === null ? '—' : `${y.occupancy}%`} sub={`${plural(y.nightsToDate, 'noche vendida', 'noches vendidas')} hasta hoy`} accent={C.timber} />
+          <KpiCard label="Tarifa promedio por noche" value={y.adr === null ? '—' : fmtMoney(y.adr)} sub="Por noche vendida" accent={C.timber} />
         </div>
         <div className="row g4 wrap" style={{ alignItems: 'stretch' }}>
           <div className="card grow" style={{ minWidth: 300 }}>
-            <SectionTitle right={<PeriodToggle value={revPeriod} onChange={setRevPeriod} />}>Revenue vs expenses</SectionTitle>
-            <ChartCanvas type="bar" money labels={revY.labels} titles={revY.titles} datasets={[{ label: 'Revenue', values: revY.rev, color: C.forest }, { label: 'Expenses', values: revY.exp, color: C.clay }]} />
+            <SectionTitle right={<PeriodToggle value={revPeriod} onChange={setRevPeriod} />}>Ingresos vs gastos</SectionTitle>
+            <ChartCanvas type="bar" money labels={revY.labels} titles={revY.titles} datasets={[{ label: 'Ingresos', values: revY.rev, color: C.forest }, { label: 'Gastos', values: revY.exp, color: C.clay }]} />
           </div>
           <div className="card grow" style={{ minWidth: 300 }}>
-            <SectionTitle right={<PeriodToggle value={occPeriod} onChange={setOccPeriod} />}>Occupancy</SectionTitle>
-            <ChartCanvas type="line" percent labels={occY.labels} titles={occY.titles} datasets={[{ label: 'Occupancy', values: occY.occ, color: C.timber }]} />
-            <div className="xs soft" style={{ marginTop: 6 }}>Includes bookings still to come. {cabins.length > 1 ? `Across ${cabins.length} cabins.` : ''}</div>
+            <SectionTitle right={<PeriodToggle value={occPeriod} onChange={setOccPeriod} />}>Ocupación</SectionTitle>
+            <ChartCanvas type="line" percent labels={occY.labels} titles={occY.titles} datasets={[{ label: 'Ocupación', values: occY.occ, color: C.timber }]} />
+            <div className="xs soft" style={{ marginTop: 6 }}>Incluye reservas que aún no llegan.</div>
           </div>
         </div>
         <div className="card">
-          <SectionTitle>Bookings by channel</SectionTitle>
-          {y.byChannel.length === 0 ? <div className="small soft">No bookings in this period.</div> : (
-            <ChartCanvas type="bar" money labels={y.byChannel.map(([name]) => name)} datasets={[{ label: 'Booking totals', values: y.byChannel.map(([, v]) => v), color: C.timber }]} />
+          <SectionTitle>Reservas por canal</SectionTitle>
+          {y.byChannel.length === 0 ? <div className="small soft">No hay reservas en este periodo.</div> : (
+            <ChartCanvas type="bar" money labels={y.byChannel.map(([name]) => name)} datasets={[{ label: 'Total de reservas', values: y.byChannel.map(([, v]) => v), color: C.timber }]} />
           )}
         </div>
       </>}
@@ -916,23 +926,23 @@ function DashboardTab({ bookings, expenses, cabins }) {
 
 /* ---------- settings tab ---------- */
 
-function SettingsTab({ cabins, channels, onExport, onBackup, onRestore }) {
+function SettingsTab({ channels, paymentMethods, onExport, onBackup, onRestore }) {
   const fileRef = useRef(null);
   return (
     <div className="col g4" style={{ maxWidth: 720 }}>
-      <ListManager title="Cabins" hint="Used in the booking form and to work out occupancy." items={cabins[0]} onAdd={cabins[1]} onRemove={cabins[2]} placeholder="e.g. Pine Cabin" />
-      <ListManager title="Booking channels" hint="Where reservations come from." items={channels[0]} onAdd={channels[1]} onRemove={channels[2]} placeholder="e.g. Facebook" />
+      <ListManager title="Canales de reserva" hint="De dónde llegan las reservas." items={channels[0]} onAdd={channels[1]} onRemove={channels[2]} placeholder="p. ej. Facebook" />
+      <ListManager title="Medios de pago" hint="Cómo te pagan las reservas." items={paymentMethods[0]} onAdd={paymentMethods[1]} onRemove={paymentMethods[2]} placeholder="p. ej. Bre-B" />
       <div className="card col g3">
-        <div style={{ fontSize: 15 }}>Data</div>
+        <div style={{ fontSize: 15 }}>Datos</div>
         <div className="small soft">
-          {sb ? 'Connected to your Supabase project — data is shared across all devices.'
-            : 'Local mode: everything is saved in this browser on this computer only. Download a backup regularly, and use a Supabase project (see CABIN_NOTES.md) to share data between devices.'}
+          {sb ? 'Conectado a tu proyecto de Supabase: los datos se comparten entre todos los dispositivos.'
+            : 'Modo local: todo se guarda solo en este navegador, en este equipo. Descarga una copia de seguridad con frecuencia y usa un proyecto de Supabase (ver CABIN_NOTES.md) para compartir los datos entre dispositivos.'}
         </div>
         <div className="row g2 wrap">
-          <Btn kind="ghost" onClick={onExport}><Icon.Download size={14} /> Export to Excel</Btn>
+          <Btn kind="ghost" onClick={onExport}><Icon.Download size={14} /> Exportar a Excel</Btn>
           {!sb ? <>
-            <Btn kind="ghost" onClick={onBackup}><Icon.Download size={14} /> Download backup (.json)</Btn>
-            <Btn kind="ghost" onClick={() => fileRef.current && fileRef.current.click()}><Icon.Upload size={14} /> Restore backup</Btn>
+            <Btn kind="ghost" onClick={onBackup}><Icon.Download size={14} /> Descargar copia (.json)</Btn>
+            <Btn kind="ghost" onClick={() => fileRef.current && fileRef.current.click()}><Icon.Upload size={14} /> Restaurar copia</Btn>
             <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) onRestore(f); }} />
           </> : null}
         </div>
@@ -951,17 +961,17 @@ function Login() {
   async function submit(e) {
     e.preventDefault(); setBusy(true); setError('');
     const { error: err } = await sb.auth.signInWithPassword({ email: email.trim(), password });
-    if (err) setError(err.message);
+    if (err) setError(errMsg(err));
     setBusy(false);
   }
   return (
     <div className="row" style={{ minHeight: '100vh', justifyContent: 'center', padding: 16 }}>
       <form onSubmit={submit} className="card col g4" style={{ width: '100%', maxWidth: 360 }}>
         <h1 className="serif" style={{ margin: 0, fontSize: 24, fontWeight: 400 }}>{APP_NAME}</h1>
-        <Field label="Email"><TextInput type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-        <Field label="Password"><TextInput type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+        <Field label="Correo electrónico"><TextInput type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+        <Field label="Contraseña"><TextInput type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
         {error ? <div className="small" style={{ color: C.clay }}>{error}</div> : null}
-        <Btn type="submit" disabled={busy}>{busy ? <Icon.Loader size={14} className="spin" /> : null}Sign in</Btn>
+        <Btn type="submit" disabled={busy}>{busy ? <Icon.Loader size={14} className="spin" /> : null}Iniciar sesión</Btn>
       </form>
     </div>
   );
@@ -990,7 +1000,7 @@ function Main({ session }) {
 
   const bookings = useTable('bookings', bookingFromDb, bookingToDb, 'check_in', notify, reportLoad, tick);
   const expenses = useTable('expenses', expenseFromDb, expenseToDb, 'date', notify, reportLoad, tick);
-  const cabins = useConfigList('cabins', notify, reportLoad, tick);
+  const paymentMethods = useConfigList('payment_methods', notify, reportLoad, tick);
   const channels = useConfigList('channels', notify, reportLoad, tick);
   const categories = useConfigList('categories', notify, reportLoad, tick);
   const refreshAll = () => setTick((t) => t + 1);
@@ -999,9 +1009,9 @@ function Main({ session }) {
   function exportExcel() {
     const wb = XLSX.utils.book_new();
     const add = (name, rows) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{}]), name);
-    add('Bookings', bookings.items.map((b) => ({ Guest: b.guest, Phone: b.phone, Cabin: b.cabin, 'Check-in': b.checkIn, 'Check-out': b.checkOut, Nights: bookingNights(b), Guests: b.guests, Total: b.total, Channel: b.channel, 'Payment method': b.paymentMethod, Notes: b.notes })));
-    add('Expenses', expenses.items.map((e) => ({ Date: e.date, Category: e.category, Description: e.description, Amount: e.amount, 'Spread over months': e.accrualMonths || '' })));
-    add('Expenses (monthly)', expenses.items.flatMap((e) => explodeExpense(e).map((s) => ({ Month: s.month, Date: s.date, Category: e.category, Description: e.description, Amount: s.amount }))));
+    add('Reservas', bookings.items.map((b) => ({ 'Huésped': b.guest, 'Teléfono': b.phone, Llegada: b.checkIn, Salida: b.checkOut, Noches: bookingNights(b), 'Huéspedes': b.guests, Total: b.total, Canal: b.channel, 'Medio de pago': b.paymentMethod, Notas: b.notes })));
+    add('Gastos', expenses.items.map((e) => ({ Fecha: e.date, 'Categoría': e.category, 'Descripción': e.description, Valor: e.amount, 'Repartido en meses': e.accrualMonths || '' })));
+    add('Gastos (por mes)', expenses.items.flatMap((e) => explodeExpense(e).map((s) => ({ Mes: s.month, Fecha: s.date, 'Categoría': e.category, 'Descripción': e.description, Valor: s.amount }))));
     XLSX.writeFile(wb, `cabin-ledger-${todayISO()}.xlsx`);
   }
   function downloadBackup() {
@@ -1012,10 +1022,10 @@ function Main({ session }) {
     try {
       const dump = JSON.parse(await file.text());
       if (!LOCAL_KEYS.some((k) => k in dump)) throw new Error('not a backup');
-      if (!window.confirm('Restoring replaces everything currently saved in this browser. Continue?')) return;
+      if (!window.confirm('Restaurar reemplaza todo lo que está guardado en este navegador. ¿Continuar?')) return;
       LOCAL_KEYS.forEach((k) => { if (k in dump) lsWrite(k, dump[k]); });
       window.location.reload();
-    } catch (e) { notify("That file isn't a Cabin Ledger backup."); }
+    } catch (e) { notify('Ese archivo no es una copia de seguridad de Cabin Ledger.'); }
   }
 
   return (
@@ -1023,32 +1033,32 @@ function Main({ session }) {
       <header className="row between wrap g3" style={{ padding: '20px 0 12px' }}>
         <div>
           <h1 className="serif" style={{ margin: 0, fontSize: 26, fontWeight: 400 }}>{APP_NAME}</h1>
-          <div className="xs soft">{sb ? `Signed in as ${session.user.email}` : 'Local mode · data saved in this browser'}</div>
+          <div className="xs soft">{sb ? `Sesión iniciada como ${session.user.email}` : 'Modo local · datos guardados en este navegador'}</div>
         </div>
         <div className="row g2">
-          <Btn kind="ghost" onClick={refreshAll}><Icon.Refresh size={14} /> Refresh</Btn>
-          {sb ? <Btn kind="ghost" onClick={() => sb.auth.signOut()}>Sign out</Btn> : null}
+          <Btn kind="ghost" onClick={refreshAll}><Icon.Refresh size={14} /> Actualizar</Btn>
+          {sb ? <Btn kind="ghost" onClick={() => sb.auth.signOut()}>Cerrar sesión</Btn> : null}
         </div>
       </header>
       <nav className="tabs top-tabs" style={{ marginBottom: 20 }}>
         {NAV.map((n) => { const I = Icon[n.icon]; return <button key={n.id} className={`tab${tab === n.id ? ' active' : ''}`} onClick={() => goTab(n.id)}><I size={15} />{n.label}</button>; })}
       </nav>
-      {sb && !online ? <div className="banner" role="alert" style={{ background: C.timberSoft, color: C.ink }}>You're offline. Nothing can be saved until the connection is back.</div> : null}
+      {sb && !online ? <div className="banner" role="alert" style={{ background: C.timberSoft, color: C.ink }}>Estás sin conexión. No se puede guardar nada hasta que vuelva el internet.</div> : null}
       {loadProblem ? (
         <div className="banner" role="alert" style={{ background: C.claySoft, color: C.clay }}>
-          <span>{loadProblem} What you see may be incomplete — don't add entries until this clears.</span>
-          <button type="button" className="btn-link" style={{ color: C.clay, fontSize: 13, textDecoration: 'underline' }} onClick={refreshAll}>Retry</button>
+          <span>{loadProblem} Lo que ves puede estar incompleto: no agregues registros hasta que esto se resuelva.</span>
+          <button type="button" className="btn-link" style={{ color: C.clay, fontSize: 13, textDecoration: 'underline' }} onClick={refreshAll}>Reintentar</button>
         </div>
       ) : null}
-      {tab === 'dashboard' ? <DashboardTab bookings={bookings.items} expenses={expenses.items} cabins={cabins[0]} /> : null}
-      {tab === 'bookings' ? <BookingsTab bookings={bookings.items} cabins={cabins[0]} channels={channels[0]} onAdd={bookings.add} notify={notify} /> : null}
+      {tab === 'dashboard' ? <DashboardTab bookings={bookings.items} expenses={expenses.items} /> : null}
+      {tab === 'bookings' ? <BookingsTab bookings={bookings.items} channels={channels[0]} paymentMethods={paymentMethods[0]} onAdd={bookings.add} notify={notify} /> : null}
       {tab === 'expenses' ? <ExpensesTab categories={categories[0]} onAddCategory={categories[1]} onRemoveCategory={categories[2]} onAdd={expenses.add} notify={notify} /> : null}
-      {tab === 'records' ? <RecordsTab bookings={bookings.items} expenses={expenses.items} cabins={cabins[0]} channels={channels[0]}
+      {tab === 'records' ? <RecordsTab bookings={bookings.items} expenses={expenses.items} channels={channels[0]} paymentMethods={paymentMethods[0]}
         categories={categories[0]} onAddCategory={categories[1]} onRemoveCategory={categories[2]}
         onSaveBooking={bookings.save} onSaveExpense={expenses.save} onRemoveBooking={bookings.remove} onRemoveExpense={expenses.remove} onExport={exportExcel} notify={notify} /> : null}
-      {tab === 'settings' ? <SettingsTab cabins={cabins} channels={channels} onExport={exportExcel} onBackup={downloadBackup} onRestore={restoreBackup} /> : null}
+      {tab === 'settings' ? <SettingsTab channels={channels} paymentMethods={paymentMethods} onExport={exportExcel} onBackup={downloadBackup} onRestore={restoreBackup} /> : null}
       {toast ? <div className="toast" role="status" style={{ position: 'fixed', bottom: 20, right: 20, background: C.ink, color: C.paper, padding: '8px 14px', borderRadius: 6, fontSize: 13, maxWidth: 360 }}>{toast}</div> : null}
-      <nav className="bottom-nav" aria-label="Main">
+      <nav className="bottom-nav" aria-label="Principal">
         {NAV.map((n) => { const I = Icon[n.icon]; return <button key={n.id} type="button" onClick={() => goTab(n.id)} style={{ color: tab === n.id ? C.forest : C.inkSoft }}><I size={20} />{n.label}</button>; })}
       </nav>
     </div>
@@ -1063,7 +1073,7 @@ function App() {
     const { data } = sb.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => data.subscription.unsubscribe();
   }, []);
-  if (session === undefined) return <EmptyState text="Loading…" />;
+  if (session === undefined) return <EmptyState text="Cargando…" />;
   if (sb && !session) return <Login />;
   return <Main session={session} />;
 }

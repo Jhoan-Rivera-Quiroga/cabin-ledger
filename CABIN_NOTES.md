@@ -2,6 +2,8 @@
 
 A rural tourist cabin version of the CasaBerry "Ledger" app. Same approach: one self-contained HTML file (React + Babel in the browser, Chart.js, SheetJS), no build step.
 
+The interface is in Spanish (es-CO). Old English default names already saved in lists and entries (e.g. "Direct", "Cash", "Utilities") are shown as their Spanish equivalents via `OLD_NAMES` in index.html.
+
 ## Files
 
 - **`index.html`** — the whole app (named index.html so a static host serves it at the site root). Open it directly for a quick look, or deploy the whole folder.
@@ -12,16 +14,16 @@ A rural tourist cabin version of the CasaBerry "Ledger" app. Same approach: one 
 | Tab | Purpose |
 |---|---|
 | Dashboard | From/To date filter (defaults to the current year; "This year", "Last 12 months", "Clear dates" for everything). Revenue, expenses, net, occupancy, average nightly rate; revenue-vs-expenses and occupancy charts, each with a Weekly / Monthly / Yearly switch (weeks run Sun–Sat, labelled W1, W2…; W1 is the week containing January 1st) |
-| Bookings | Entry form only: guest, cabin, dates, channel, **Total** (what you actually receive), payment method, notes. Blocks double-bookings per cabin |
+| Bookings | Entry form only: guest, dates, channel, **Total** (what you actually receive), payment method, notes. Single cabin: no cabin field; blocks overlapping stays |
 | Expenses | Entry form only: date, category (with inline "Manage list"), description, amount, optional "spread over N months" |
-| Records | Switch between Bookings / Expenses, filter by date range, cabin or category, search; edit, delete, Excel export |
-| Settings | Cabins, booking channels, data export / local backup |
+| Records | Switch between Bookings / Expenses, filter by date range or category, search; edit, delete, Excel export |
+| Settings | Booking channels, payment methods, data export / local backup |
 
 ## Logic worth knowing
 
 - **No booking status.** Every saved booking counts. To cancel, delete it in Records. (Existing local data saved by the first version may still carry a hidden `status` — it is ignored.)
 - **Revenue recognition** (`computeRange`): the booking Total is split evenly across its nights (remainder on the last night), so a stay crossing a month end is split. Expenses spread over N months are split evenly; only the shares inside the chosen date range count.
-- **Occupancy KPI** = nights sold up to today ÷ (cabins × days elapsed in the range). The monthly chart includes future bookings.
+- **Occupancy KPI** = nights sold up to today ÷ days elapsed in the range (one cabin). The monthly chart includes future bookings.
 - **Check-out day is free**: a stay occupies nights `checkIn … checkOut-1`, so a same-day turnover is not a conflict.
 - Records date filters: bookings by check-in day, expenses by payment date.
 - Money is whole numbers in `CURRENCY` (COP, formatted es-CO, top of the script).
