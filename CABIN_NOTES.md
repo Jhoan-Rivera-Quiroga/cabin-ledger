@@ -11,7 +11,7 @@ A rural tourist cabin version of the CasaBerry "Ledger" app. Same approach: one 
 
 | Tab | Purpose |
 |---|---|
-| Dashboard | From/To date filter (defaults to the current year; "This year", "Last 12 months", "Clear dates" for everything). Revenue, expenses, net, occupancy, average nightly rate; revenue-vs-expenses and occupancy charts |
+| Dashboard | From/To date filter (defaults to the current year; "This year", "Last 12 months", "Clear dates" for everything). Revenue, expenses, net, occupancy, average nightly rate; revenue-vs-expenses and occupancy charts, each with a Weekly / Monthly / Yearly switch (weeks run Sun–Sat, labelled W1, W2…; W1 is the week containing January 1st) |
 | Bookings | Entry form only: guest, cabin, dates, channel, **Total** (what you actually receive), payment method, notes. Blocks double-bookings per cabin |
 | Expenses | Entry form only: date, category (with inline "Manage list"), description, amount, optional "spread over N months" |
 | Records | Switch between Bookings / Expenses, filter by date range, cabin or category, search; edit, delete, Excel export |

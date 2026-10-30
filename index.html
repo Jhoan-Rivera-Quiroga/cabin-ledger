@@ -199,9 +199,44 @@ function findConflict(bookings, cand, ignoreId) {
   return bookings.find((b) => b.id !== ignoreId && b.cabin === cand.cabin && b.checkIn < cand.checkOut && cand.checkIn < b.checkOut) || null;
 }
 
-/** Everything the dashboard shows for the chosen date range (empty from/to = everything on record).
- *  Revenue is recognised per night (a stay that crosses a month end is split). */
-function computeRange(bookings, expenses, from, to, cabinCount, today) {
+/* ---------- chart periods: week (Sun-Sat), month, year ---------- */
+
+const PERIODS = [['week', 'Weekly'], ['month', 'Monthly'], ['year', 'Yearly']];
+const weekday = (d) => new Date(parseISO(d)).getUTCDay(); // 0 = Sunday
+/** First day of the period that contains date d. */
+function periodStart(d, period) {
+  if (period === 'week') return addDays(d, -weekday(d));
+  if (period === 'year') return d.slice(0, 4) + '-01-01';
+  return d.slice(0, 7) + '-01';
+}
+function nextPeriod(p, period) {
+  if (period === 'week') return addDays(p, 7);
+  if (period === 'year') return `${Number(p.slice(0, 4)) + 1}-01-01`;
+  return addMonths(p.slice(0, 7), 1) + '-01';
+}
+/** Number of the Sun-Sat week containing date d, counted in d's year: W1 is the week that contains January 1st. */
+function weekNumber(d) {
+  const jan1 = d.slice(0, 4) + '-01-01';
+  return Math.floor((nightsBetween(jan1, d) + weekday(jan1)) / 7) + 1;
+}
+/** A week is numbered by its Saturday, so a week crossing New Year is W1 of the new year -- unless the date range
+ *  ends before that Saturday, in which case it is the last week (W53) of the year being shown. */
+const weekRef = (p, end) => { const sat = addDays(p, 6); return sat > end ? end : sat; };
+function periodLabel(p, period, multiYear, end) {
+  if (period === 'year') return p.slice(0, 4);
+  if (period === 'week') { const r = weekRef(p, end); return `W${weekNumber(r)}` + (multiYear ? ` '${r.slice(2, 4)}` : ''); }
+  return MONTH_NAMES[Number(p.slice(5, 7)) - 1] + (multiYear ? ` '${p.slice(2, 4)}` : '');
+}
+/** Longer name for the chart tooltip, e.g. "W5 · Jan 25 – Jan 31, 2026". */
+function periodTitle(p, period, end) {
+  if (period === 'year') return p.slice(0, 4);
+  if (period === 'week') return `W${weekNumber(weekRef(p, end))} · ${fmtShort(p)} – ${fmtDate(addDays(p, 6))}`;
+  return `${MONTH_NAMES[Number(p.slice(5, 7)) - 1]} ${p.slice(0, 4)}`;
+}
+
+/** Everything the dashboard shows for the chosen date range (empty from/to = everything on record), with the
+ *  chart series grouped by `period`. Revenue is recognised per night (a stay that crosses a period end is split). */
+function computeRange(bookings, expenses, from, to, cabinCount, today, period = 'month') {
   const all = [];
   bookings.forEach((b) => { all.push(b.checkIn, addDays(b.checkOut, -1)); });
   expenses.forEach((e) => explodeExpense(e).forEach((s) => all.push(s.date)));
@@ -210,25 +245,27 @@ function computeRange(bookings, expenses, from, to, cabinCount, today) {
   const end = to || all[all.length - 1] || today;
   if (start > end) return null;
 
-  const months = [];
-  for (let k = start.slice(0, 7); k <= end.slice(0, 7) && months.length < 120; k = addMonths(k, 1)) months.push(k);
-  const idx = {}; months.forEach((k, i) => { idx[k] = i; });
-  const rev = Array(months.length).fill(0), exp = Array(months.length).fill(0), nights = Array(months.length).fill(0);
+  const keys = [];
+  for (let k = periodStart(start, period); k <= end && keys.length < 600; k = nextPeriod(k, period)) keys.push(k);
+  const idx = {}; keys.forEach((k, i) => { idx[k] = i; });
+  const slot = (d) => idx[periodStart(d, period)];
+  const rev = Array(keys.length).fill(0), exp = Array(keys.length).fill(0), nights = Array(keys.length).fill(0);
   let nightsToDate = 0, lodgingToDate = 0;
   const chan = {};
 
   bookings.forEach((b) => {
     nightShares(b).forEach(({ date: d, amount }) => {
-      if (d < start || d > end || !(d.slice(0, 7) in idx)) return;
-      const i = idx[d.slice(0, 7)];
+      const i = slot(d);
+      if (d < start || d > end || i === undefined) return;
       rev[i] += amount; nights[i] += 1;
       chan[b.channel || 'No channel'] = (chan[b.channel || 'No channel'] || 0) + amount;
       if (d <= today) { nightsToDate += 1; lodgingToDate += amount; }
     });
   });
   expenses.forEach((e) => explodeExpense(e).forEach((s) => {
-    if (s.date < start || s.date > end || !(s.month in idx)) return;
-    exp[idx[s.month]] += s.amount;
+    const i = slot(s.date);
+    if (s.date < start || s.date > end || i === undefined) return;
+    exp[i] += s.amount;
   }));
 
   const sum = (a) => a.reduce((x, y) => x + y, 0);
@@ -236,17 +273,18 @@ function computeRange(bookings, expenses, from, to, cabinCount, today) {
   const elapsedEnd = end < today ? end : today;
   const elapsed = elapsedEnd >= start ? nightsBetween(start, elapsedEnd) + 1 : 0;
   const multiYear = start.slice(0, 4) !== end.slice(0, 4);
-  const monthOccupancy = months.map((k, i) => {
-    const [y, m] = k.split('-').map(Number);
-    const a = k + '-01' > start ? k + '-01' : start;
-    const lastDay = `${k}-${pad2(daysInMonth(y, m))}`;
-    const z = lastDay < end ? lastDay : end;
+  // Occupancy per period counts only the days of that period inside the From/To range.
+  const occ = keys.map((k, i) => {
+    const a = k > start ? k : start;
+    const last = addDays(nextPeriod(k, period), -1);
+    const z = last < end ? last : end;
     const days = nightsBetween(a, z) + 1;
     return Math.round((nights[i] / (days * cabins)) * 1000) / 10;
   });
   return {
-    start, end, labels: months.map((k) => MONTH_NAMES[Number(k.slice(5, 7)) - 1] + (multiYear ? ` '${k.slice(2, 4)}` : '')),
-    rev, exp, monthOccupancy,
+    start, end,
+    labels: keys.map((k) => periodLabel(k, period, multiYear, end)), titles: keys.map((k) => periodTitle(k, period, end)),
+    rev, exp, occ,
     byChannel: Object.entries(chan).sort((a, b) => b[1] - a[1]),
     revenue: sum(rev), expenses: sum(exp),
     occupancy: elapsed ? Math.round((nightsToDate / (elapsed * cabins)) * 1000) / 10 : null,
@@ -452,7 +490,7 @@ function DateRangeFilter({ from, to, onFromChange, onToChange, presets }) {
   );
 }
 
-function ChartCanvas({ type, labels, datasets, money, percent }) {
+function ChartCanvas({ type, labels, titles, datasets, money, percent }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
   useEffect(() => {
@@ -466,14 +504,14 @@ function ChartCanvas({ type, labels, datasets, money, percent }) {
         datasets: datasets.map((d) => ({
           label: d.label, data: d.values, borderColor: resolveColor(d.color),
           backgroundColor: type === 'line' ? 'transparent' : resolveColor(d.color),
-          borderWidth: type === 'line' ? 2 : 0, borderRadius: type === 'bar' ? 3 : 0, tension: 0.3, pointRadius: 0, maxBarThickness: 28,
+          borderWidth: type === 'line' ? 2 : 0, borderRadius: type === 'bar' ? 3 : 0, tension: 0.3, pointRadius: labels.length < 3 ? 4 : 0, maxBarThickness: 28, // a line needs dots when there are only one or two points
         })),
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: datasets.length > 1, labels: { color: inkSoft, boxWidth: 12, font: { size: 11 } } },
-          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label ? ctx.dataset.label + ': ' : ''}${money ? fmtMoney(ctx.parsed.y) : percent ? ctx.parsed.y + '%' : ctx.parsed.y}` } },
+          tooltip: { callbacks: { ...(titles ? { title: (items) => (items.length ? titles[items[0].dataIndex] : '') } : {}), label: (ctx) => `${ctx.dataset.label ? ctx.dataset.label + ': ' : ''}${money ? fmtMoney(ctx.parsed.y) : percent ? ctx.parsed.y + '%' : ctx.parsed.y}` } },
         },
         scales: {
           x: { ticks: { color: inkSoft, font: { size: 11 } }, grid: { display: false } },
@@ -483,7 +521,7 @@ function ChartCanvas({ type, labels, datasets, money, percent }) {
     });
     return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
     // eslint-disable-next-line
-  }, [type, JSON.stringify(labels), JSON.stringify(datasets), money, percent]);
+  }, [type, JSON.stringify(labels), JSON.stringify(titles), JSON.stringify(datasets), money, percent]);
   return <div style={{ height: 220 }}><canvas ref={canvasRef}></canvas></div>;
 }
 
@@ -810,12 +848,28 @@ function RecordsTab({ bookings, expenses, cabins, channels, categories, onAddCat
 
 /* ---------- dashboard tab ---------- */
 
+/** Weekly / Monthly / Yearly switch shown on a chart's title row. */
+function PeriodToggle({ value, onChange }) {
+  return (
+    <div className="row" style={{ border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden' }}>
+      {PERIODS.map(([id, label]) => (
+        <button key={id} type="button" onClick={() => onChange(id)} className="xs"
+          style={{ padding: '5px 10px', border: 'none', cursor: 'pointer', background: value === id ? C.forest : C.panel, color: value === id ? '#fff' : C.inkSoft }}>{label}</button>
+      ))}
+    </div>
+  );
+}
+
 function DashboardTab({ bookings, expenses, cabins }) {
   const today = todayISO();
   const thisYear = today.slice(0, 4);
   const [from, setFrom] = useState(`${thisYear}-01-01`);
   const [to, setTo] = useState(`${thisYear}-12-31`);
+  const [revPeriod, setRevPeriod] = useState('month');
+  const [occPeriod, setOccPeriod] = useState('month');
   const y = useMemo(() => computeRange(bookings, expenses, from, to, cabins.length, today), [bookings, expenses, from, to, cabins.length, today]);
+  const revY = useMemo(() => computeRange(bookings, expenses, from, to, cabins.length, today, revPeriod), [bookings, expenses, from, to, cabins.length, today, revPeriod]);
+  const occY = useMemo(() => computeRange(bookings, expenses, from, to, cabins.length, today, occPeriod), [bookings, expenses, from, to, cabins.length, today, occPeriod]);
 
   const presets = (
     <div className="row g3">
@@ -840,12 +894,12 @@ function DashboardTab({ bookings, expenses, cabins }) {
         </div>
         <div className="row g4 wrap" style={{ alignItems: 'stretch' }}>
           <div className="card grow" style={{ minWidth: 300 }}>
-            <SectionTitle>Revenue vs expenses</SectionTitle>
-            <ChartCanvas type="bar" money labels={y.labels} datasets={[{ label: 'Revenue', values: y.rev, color: C.forest }, { label: 'Expenses', values: y.exp, color: C.clay }]} />
+            <SectionTitle right={<PeriodToggle value={revPeriod} onChange={setRevPeriod} />}>Revenue vs expenses</SectionTitle>
+            <ChartCanvas type="bar" money labels={revY.labels} titles={revY.titles} datasets={[{ label: 'Revenue', values: revY.rev, color: C.forest }, { label: 'Expenses', values: revY.exp, color: C.clay }]} />
           </div>
           <div className="card grow" style={{ minWidth: 300 }}>
-            <SectionTitle>Occupancy by month</SectionTitle>
-            <ChartCanvas type="line" percent labels={y.labels} datasets={[{ label: 'Occupancy', values: y.monthOccupancy, color: C.timber }]} />
+            <SectionTitle right={<PeriodToggle value={occPeriod} onChange={setOccPeriod} />}>Occupancy</SectionTitle>
+            <ChartCanvas type="line" percent labels={occY.labels} titles={occY.titles} datasets={[{ label: 'Occupancy', values: occY.occ, color: C.timber }]} />
             <div className="xs soft" style={{ marginTop: 6 }}>Includes bookings still to come. {cabins.length > 1 ? `Across ${cabins.length} cabins.` : ''}</div>
           </div>
         </div>
