@@ -159,6 +159,7 @@ function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
+const monthStart = (d) => d.slice(0, 7) + '-01'; // date filters default to month-to-date: the 1st of this month through today
 const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate(); // m is 1-based
 function fmtDate(s) { if (!s) return ''; const [y, m, d] = s.split('-').map(Number); return `${d} ${MONTH_NAMES[m - 1]} ${y}`; }
 function fmtShort(s) { const [, m, d] = s.split('-').map(Number); return `${d} ${MONTH_NAMES[m - 1]}`; }
@@ -761,8 +762,8 @@ function ExpensesTab({ categories, onAddCategory, onRemoveCategory, onAdd, notif
 function RecordsTab({ bookings, expenses, channels, paymentMethods, categories, onAddCategory, onRemoveCategory,
   onSaveBooking, onSaveExpense, onRemoveBooking, onRemoveExpense, onExport, notify }) {
   const [type, setType] = useState('bookings');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [from, setFrom] = useState(() => monthStart(todayISO()));
+  const [to, setTo] = useState(() => todayISO());
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null); // { type, rec }
@@ -802,7 +803,8 @@ function RecordsTab({ bookings, expenses, channels, paymentMethods, categories, 
         <TextInput type="search" placeholder={type === 'bookings' ? 'Buscar huésped, teléfono, notas…' : 'Buscar descripción…'} value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 240 }} />
       </div>
       <div className="row between wrap g3">
-        <DateRangeFilter from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
+        <DateRangeFilter from={from} to={to} onFromChange={setFrom} onToChange={setTo}
+          presets={<button type="button" className="btn-link" onClick={() => { const t = todayISO(); setFrom(monthStart(t)); setTo(t); }}>Mes a la fecha</button>} />
         <span className="small soft">
           {type === 'bookings' ? `${plural(bookingRows.length, 'reserva', 'reservas')} · ${fmtMoney(bookingTotals)}` : `${plural(expenseRows.length, 'gasto', 'gastos')} · ${fmtMoney(expenseTotal)}`}
         </span>
@@ -873,8 +875,8 @@ function PeriodToggle({ value, onChange }) {
 function DashboardTab({ bookings, expenses }) {
   const today = todayISO();
   const thisYear = today.slice(0, 4);
-  const [from, setFrom] = useState(`${thisYear}-01-01`);
-  const [to, setTo] = useState(`${thisYear}-12-31`);
+  const [from, setFrom] = useState(monthStart(today));
+  const [to, setTo] = useState(today);
   const [revPeriod, setRevPeriod] = useState('month');
   const [occPeriod, setOccPeriod] = useState('month');
   const y = useMemo(() => computeRange(bookings, expenses, from, to, 1, today), [bookings, expenses, from, to, today]);
@@ -882,7 +884,8 @@ function DashboardTab({ bookings, expenses }) {
   const occY = useMemo(() => computeRange(bookings, expenses, from, to, 1, today, occPeriod), [bookings, expenses, from, to, today, occPeriod]);
 
   const presets = (
-    <div className="row g3">
+    <div className="row g3 wrap">
+      <button type="button" className="btn-link" onClick={() => { setFrom(monthStart(today)); setTo(today); }}>Mes a la fecha</button>
       <button type="button" className="btn-link" onClick={() => { setFrom(`${thisYear}-01-01`); setTo(`${thisYear}-12-31`); }}>Este año</button>
       <button type="button" className="btn-link" onClick={() => { setFrom(addDays(today, -364)); setTo(today); }}>Últimos 12 meses</button>
     </div>

@@ -13,10 +13,10 @@ The interface is in Spanish (es-CO). Old English default names already saved in 
 
 | Tab | Purpose |
 |---|---|
-| Dashboard | From/To date filter (defaults to the current year; "This year", "Last 12 months", "Clear dates" for everything). Revenue, expenses, net, occupancy, average nightly rate; revenue-vs-expenses and occupancy charts, each with a Weekly / Monthly / Yearly switch (weeks run Sun–Sat, labelled W1, W2…; W1 is the week containing January 1st) |
+| Dashboard | From/To date filter (defaults to month-to-date; "Mes a la fecha", "This year", "Last 12 months", "Clear dates" for everything). Revenue, expenses, net, occupancy, average nightly rate; revenue-vs-expenses and occupancy charts, each with a Weekly / Monthly / Yearly switch (weeks run Sun–Sat, labelled W1, W2…; W1 is the week containing January 1st) |
 | Bookings | Entry form only: guest, dates, channel, **Total** (what you actually receive), payment method, notes. Single cabin: no cabin field; blocks overlapping stays |
 | Expenses | Entry form only: date, category (with inline "Manage list"), description, amount, optional "spread over N months" |
-| Records | Switch between Bookings / Expenses, filter by date range or category, search; edit, delete, Excel export |
+| Records | Switch between Bookings / Expenses, filter by date range (defaults to month-to-date) or category, search; edit, delete, Excel export |
 | Settings | Booking channels, payment methods, data export / local backup |
 
 ## Logic worth knowing
